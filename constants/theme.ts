@@ -1,5 +1,5 @@
 /**
- * Lydia Schedule App — Dark Fitness Theme
+ * Lydia Schedule App — Theme tokens
  */
 
 import { Platform } from 'react-native';
@@ -23,29 +23,28 @@ export const Colors = {
   },
 };
 
-// App-wide design tokens — always dark
-export const AppTheme = {
+export const AppThemeDark = {
   bg: '#0D0D1A',
   bgCard: '#16162A',
   bgCardAlt: '#1E1E38',
   border: '#2A2A4A',
-  primary: '#a855f7',      // purple
+  primary: '#a855f7',
   primaryLight: '#d8b4fe',
-  secondary: '#22d3ee',    // cyan
+  secondary: '#22d3ee',
   secondaryLight: '#a5f3fc',
-  gym: '#f43f5e',          // rose/red
-  class: '#3b82f6',        // blue
-  sleep: '#7c3aed',        // dark purple
-  work: '#475569',         // slate
-  meal: '#22c55e',         // green
-  shake: '#06b6d4',        // cyan
-  supplement: '#f59e0b',   // amber
-  rest: '#6366f1',         // indigo
-  yoga: '#10b981',         // emerald
-  water: '#38bdf8',        // sky
-  wake: '#fbbf24',         // amber/gold
-  prep: '#94a3b8',         // cool grey
-  free: '#64748b',         // slate
+  gym: '#f43f5e',
+  class: '#3b82f6',
+  sleep: '#7c3aed',
+  work: '#475569',
+  meal: '#22c55e',
+  shake: '#06b6d4',
+  supplement: '#f59e0b',
+  rest: '#6366f1',
+  yoga: '#10b981',
+  water: '#38bdf8',
+  wake: '#fbbf24',
+  prep: '#94a3b8',
+  free: '#64748b',
   textPrimary: '#F0F0FF',
   textSecondary: '#94A3C0',
   textMuted: '#5A5A7A',
@@ -53,6 +52,41 @@ export const AppTheme = {
   warning: '#fbbf24',
   error: '#f87171',
 };
+
+export const AppThemeLight = {
+  bg: '#F8F9FA',
+  bgCard: '#FFFFFF',
+  bgCardAlt: '#F2F2F7',
+  border: '#E2E8F0',
+  primary: '#a855f7',
+  primaryLight: '#7e22ce',
+  secondary: '#0891b2',
+  secondaryLight: '#0e7490',
+  gym: '#e11d48',
+  class: '#2563eb',
+  sleep: '#6d28d9',
+  work: '#334155',
+  meal: '#16a34a',
+  shake: '#0284c7',
+  supplement: '#d97706',
+  rest: '#4f46e5',
+  yoga: '#059669',
+  water: '#0284c7',
+  wake: '#d97706',
+  prep: '#64748b',
+  free: '#475569',
+  textPrimary: '#1A1A2E',
+  textSecondary: '#4A5568',
+  textMuted: '#9CA3AF',
+  success: '#16a34a',
+  warning: '#d97706',
+  error: '#dc2626',
+};
+
+// Backwards-compatible alias — always dark; use useAppTheme() for dynamic theming
+export const AppTheme = AppThemeDark;
+
+export type AppThemeType = typeof AppThemeDark;
 
 export const Fonts = Platform.select({
   ios: {

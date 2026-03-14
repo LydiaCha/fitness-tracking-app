@@ -1,17 +1,19 @@
 {
   "expo": {
-    "name": "Day Tracker",
-    "slug": "lydia-schedule",
+    "name": "PeakRoutine",
+    "slug": "peakroutine",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "lydiaschedule",
+    "scheme": "peakroutine",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSUserNotificationsUsageDescription": "Get reminders for meals, water, workouts and supplements."
+        "NSUserNotificationsUsageDescription": "Get reminders for meals, water, workouts and supplements.",
+        "NSCameraUsageDescription": "Used to scan food barcodes for meal logging.",
+        "NSFaceIDUsageDescription": "Use Face ID to unlock the app quickly and securely."
       }
     },
     "android": {
@@ -26,7 +28,8 @@
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
-        "USE_EXACT_ALARM"
+        "USE_EXACT_ALARM",
+        "CAMERA"
       ]
     },
     "web": {
@@ -36,6 +39,7 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
+      "expo-camera",
       [
         "expo-splash-screen",
         {
@@ -47,7 +51,9 @@
             "backgroundColor": "#0D0D1A"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-local-authentication"
     ],
     "experiments": {
       "typedRoutes": true,

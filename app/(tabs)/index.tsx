@@ -7,14 +7,15 @@ import {
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
-import { useScrollToTop } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppTheme } from '@/constants/theme';
+import { useScrollToTop } from '@react-navigation/native';
+import { AppThemeType } from '@/constants/theme';
+import { useAppTheme } from '@/context/ThemeContext';
 import { WEEK_SCHEDULE, ScheduleEvent } from '@/constants/scheduleData';
 import { MACRO_TARGETS, SHAKE_RECIPES, MEAL_IDEAS } from '@/constants/nutritionData';
 import { getTodayId, STORAGE_KEYS, toKey, getWeekDates } from '@/utils/appConstants';
 import { ChecklistItem } from '@/components/ChecklistItem';
+import { safeMergeItem } from '@/utils/storage';
 
 // Returns ml of water this event represents (water + wake events only)
 function getEventWaterMl(event: ScheduleEvent): number {
@@ -27,7 +28,7 @@ function getEventWaterMl(event: ScheduleEvent): number {
   return event.type === 'water' ? 250 : 0;
 }
 
-// Returns macros for a meal/shake event (recipe data or parsed from detail text)
+// Returns macros for a meal/shake event
 function getEventMacros(event: ScheduleEvent): { calories: number; protein: number; carbs: number; fat: number } {
   if (event.recipeId) {
     const recipe = event.recipeType === 'shake'
@@ -51,15 +52,12 @@ function getEventMacros(event: ScheduleEvent): { calories: number; protein: numb
 
 function getWeekLabel(dates: Date[]): string {
   const fmt = (d: Date) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-  const start = fmt(dates[0]);
-  const end = fmt(dates[6]);
-  // If same month, show "2–8 Mar"; if different, show "30 Mar – 5 Apr"
   const sameMonth = dates[0].getMonth() === dates[6].getMonth();
   if (sameMonth) {
     const month = dates[0].toLocaleDateString('en-AU', { month: 'short' });
     return `${dates[0].getDate()}–${dates[6].getDate()} ${month}`;
   }
-  return `${start} – ${end}`;
+  return `${fmt(dates[0])} – ${fmt(dates[6])}`;
 }
 
 function getGreeting() {
@@ -83,11 +81,70 @@ function getMotivation() {
   return phrases[new Date().getDay()];
 }
 
+function useStyles(theme: AppThemeType) {
+  return useMemo(() => StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.bg },
+    scroll: { flex: 1 },
+    content: { paddingHorizontal: 16, paddingTop: 8 },
+
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+    headerLeft: { flex: 1 },
+    greeting: { fontSize: 22, fontWeight: '700', color: theme.textPrimary, marginBottom: 3 },
+    motivation: { fontSize: 13, color: theme.textSecondary },
+    weekBadge: { backgroundColor: theme.primary + '22', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: theme.primary + '55' },
+    weekBadgeText: { color: theme.primary, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+
+    dayHeader: { marginBottom: 14 },
+    dayNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+    dayName: { fontSize: 30, fontWeight: '800', color: theme.textPrimary },
+    backToTodayBtn: { backgroundColor: theme.primary + '22', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: theme.primary + '55' },
+    backToTodayText: { fontSize: 11, fontWeight: '700', color: theme.primary },
+    dayBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
+    badge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1 },
+    badgeText: { fontSize: 12, fontWeight: '600' },
+    workoutFocus: { fontSize: 13, color: theme.textSecondary },
+
+    targetsCard: { backgroundColor: theme.bgCard, borderRadius: 16, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, borderWidth: 1, borderColor: theme.border },
+    targetRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
+    targetRowBorder: { borderBottomWidth: 1, borderBottomColor: theme.border },
+    targetRowEmoji: { fontSize: 15, width: 22, textAlign: 'center' },
+    targetRowLabel: { fontSize: 12, color: theme.textSecondary, width: 58 },
+    targetRowBar: { flex: 1, height: 4, backgroundColor: theme.bgCardAlt, borderRadius: 2, overflow: 'hidden' },
+    targetRowFill: { height: 4, borderRadius: 2 },
+    targetRowValue: { fontSize: 12, fontWeight: '700', textAlign: 'right', minWidth: 42 },
+    targetRowSep: { fontSize: 11, color: theme.textMuted, fontWeight: '400' },
+    targetRowTotal: { fontSize: 11, color: theme.textMuted, fontWeight: '400' },
+
+    section: { marginBottom: 20 },
+    sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.textPrimary, marginBottom: 10 },
+
+    checklistTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    checklistProgress: { fontSize: 13, fontWeight: '700', color: theme.primary },
+    progressBg: { height: 4, backgroundColor: theme.bgCardAlt, borderRadius: 2, marginBottom: 12, overflow: 'hidden' },
+    progressFill: { height: 4, backgroundColor: theme.primary, borderRadius: 2 },
+    allDone: { backgroundColor: theme.success + '22', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: theme.success + '44', marginBottom: 10 },
+    allDoneText: { fontSize: 13, color: theme.success, textAlign: 'center', fontWeight: '600' },
+    timeline: { paddingLeft: 2 },
+
+    weekRow: { gap: 10, paddingRight: 16 },
+    dayPill: { backgroundColor: theme.bgCard, borderRadius: 12, padding: 12, alignItems: 'center', minWidth: 68, borderWidth: 1, borderColor: theme.border },
+    dayPillActive: { borderColor: theme.primary, backgroundColor: theme.primary + '15' },
+    todayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: theme.primary, marginBottom: 4 },
+    dayPillName: { fontSize: 11, fontWeight: '700', color: theme.textSecondary, letterSpacing: 0.5, marginBottom: 2 },
+    dayPillDate: { fontSize: 18, fontWeight: '800', color: theme.textPrimary, marginBottom: 6 },
+    dayPillTypeDot: { width: 6, height: 6, borderRadius: 3 },
+
+    bottomPad: { height: 24 },
+  }), [theme]);
+}
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
+  const { theme, isDark } = useAppTheme();
+  const s = useStyles(theme);
+
   const [allCheckedEvents, setAllCheckedEvents] = useState<Record<string, Set<number>>>({});
   const todayId = getTodayId();
   const [selectedDayId, setSelectedDayId] = useState(todayId);
@@ -120,26 +177,24 @@ export default function HomeScreen() {
     daySet.has(idx) ? daySet.delete(idx) : daySet.add(idx);
     setAllCheckedEvents(prev => ({ ...prev, [selectedDayId]: daySet }));
 
-    // Sync gym + water to Progress tab (today only)
     if (selectedDayId === todayId) {
       const todayKey = toKey(new Date());
       const event = selectedDay.events[idx];
 
       if (event.type === 'gym') {
-        AsyncStorage.mergeItem(STORAGE_KEYS.WORKOUTS, JSON.stringify({ [todayKey]: daySet.has(idx) }));
+        safeMergeItem(STORAGE_KEYS.WORKOUTS, JSON.stringify({ [todayKey]: daySet.has(idx) }));
       }
 
-      // Recompute total water ml from updated checked set
       const totalWaterMl = selectedDay.events.reduce(
         (sum, e, i) => sum + (daySet.has(i) ? getEventWaterMl(e) : 0), 0
       );
-      AsyncStorage.mergeItem(STORAGE_KEYS.WATER, JSON.stringify({ [todayKey]: totalWaterMl >= 2500 }));
+      safeMergeItem(STORAGE_KEYS.WATER, JSON.stringify({ [todayKey]: totalWaterMl >= 2500 }));
     }
   }, [allCheckedEvents, selectedDayId, todayId, selectedDay.events]);
 
   return (
     <SafeAreaView style={s.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={AppTheme.bg} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
       <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 
         {/* ── Header ── */}
@@ -163,18 +218,18 @@ export default function HomeScreen() {
           </View>
           <View style={s.dayBadges}>
             {selectedDay.isGymDay && (
-              <View style={[s.badge, { backgroundColor: AppTheme.gym + '25', borderColor: AppTheme.gym }]}>
-                <Text style={[s.badgeText, { color: AppTheme.gym }]}>🏋️ Gym</Text>
+              <View style={[s.badge, { backgroundColor: theme.gym + '25', borderColor: theme.gym }]}>
+                <Text style={[s.badgeText, { color: theme.gym }]}>🏋️ Gym</Text>
               </View>
             )}
             {selectedDay.isRestDay && (
-              <View style={[s.badge, { backgroundColor: AppTheme.rest + '25', borderColor: AppTheme.rest }]}>
-                <Text style={[s.badgeText, { color: AppTheme.rest }]}>😌 Rest</Text>
+              <View style={[s.badge, { backgroundColor: theme.rest + '25', borderColor: theme.rest }]}>
+                <Text style={[s.badgeText, { color: theme.rest }]}>😌 Rest</Text>
               </View>
             )}
             {selectedDay.isClassDay && (
-              <View style={[s.badge, { backgroundColor: AppTheme.class + '25', borderColor: AppTheme.class }]}>
-                <Text style={[s.badgeText, { color: AppTheme.class }]}>📚 Class {selectedDay.classTime}</Text>
+              <View style={[s.badge, { backgroundColor: theme.class + '25', borderColor: theme.class }]}>
+                <Text style={[s.badgeText, { color: theme.class }]}>📚 Class {selectedDay.classTime}</Text>
               </View>
             )}
           </View>
@@ -182,7 +237,6 @@ export default function HomeScreen() {
             <Text style={s.workoutFocus}>Focus: {selectedDay.workoutFocus}</Text>
           )}
         </View>
-
 
         {/* ── This Week mini calendar ── */}
         <View style={s.section}>
@@ -199,10 +253,10 @@ export default function HomeScreen() {
                   onPress={() => setSelectedDayId(day.id)}
                   style={[s.dayPill, isSelected && s.dayPillActive]}>
                   {isToday && <View style={s.todayDot} />}
-                  <Text style={[s.dayPillName, isSelected && { color: AppTheme.primary }]}>{day.shortName}</Text>
-                  <Text style={[s.dayPillDate, isSelected && { color: AppTheme.primary }]}>{dateNum}</Text>
+                  <Text style={[s.dayPillName, isSelected && { color: theme.primary }]}>{day.shortName}</Text>
+                  <Text style={[s.dayPillDate, isSelected && { color: theme.primary }]}>{dateNum}</Text>
                   <View style={[s.dayPillTypeDot, {
-                    backgroundColor: day.isGymDay ? AppTheme.gym : day.isRestDay ? AppTheme.rest : AppTheme.class
+                    backgroundColor: day.isGymDay ? theme.gym : day.isRestDay ? theme.rest : theme.class
                   }]} />
                 </TouchableOpacity>
               );
@@ -215,19 +269,19 @@ export default function HomeScreen() {
           <Text style={s.sectionTitle}>📊 Daily Targets</Text>
           <View style={s.targetsCard}>
             {[
-              { label: 'Calories', emoji: '🔥', color: AppTheme.meal,
+              { label: 'Calories', emoji: '🔥', color: theme.meal,
                 consumed: consumed.calories, target: MACRO_TARGETS.calories,
                 valueStr: `${consumed.calories}`, targetStr: `${MACRO_TARGETS.calories} kcal` },
-              { label: 'Protein',  emoji: '💪', color: AppTheme.primary,
+              { label: 'Protein',  emoji: '💪', color: theme.primary,
                 consumed: consumed.protein,  target: MACRO_TARGETS.protein,
                 valueStr: `${consumed.protein}g`, targetStr: `${MACRO_TARGETS.protein}g` },
-              { label: 'Carbs',    emoji: '🌾', color: AppTheme.water,
+              { label: 'Carbs',    emoji: '🌾', color: theme.water,
                 consumed: consumed.carbs,    target: MACRO_TARGETS.carbs,
                 valueStr: `${consumed.carbs}g`, targetStr: `${MACRO_TARGETS.carbs}g` },
-              { label: 'Fat',      emoji: '🧈', color: AppTheme.supplement,
+              { label: 'Fat',      emoji: '🧈', color: theme.supplement,
                 consumed: consumed.fat,      target: MACRO_TARGETS.fat,
                 valueStr: `${consumed.fat}g`, targetStr: `${MACRO_TARGETS.fat}g` },
-              { label: 'Water',    emoji: '💧', color: AppTheme.secondary,
+              { label: 'Water',    emoji: '💧', color: theme.secondary,
                 consumed: consumed.water,    target: MACRO_TARGETS.water,
                 valueStr: `${(consumed.water / 1000).toFixed(1)}L`, targetStr: `${MACRO_TARGETS.water / 1000}L` },
             ].map((item, idx, arr) => {
@@ -240,7 +294,7 @@ export default function HomeScreen() {
                   <View style={s.targetRowBar}>
                     <View style={[s.targetRowFill, { width: `${pct}%` as any, backgroundColor: item.color }]} />
                   </View>
-                  <Text style={[s.targetRowValue, { color: item.consumed > 0 ? item.color : AppTheme.textSecondary }]}>
+                  <Text style={[s.targetRowValue, { color: item.consumed > 0 ? item.color : theme.textSecondary }]}>
                     {item.valueStr}
                     <Text style={s.targetRowSep}> / </Text>
                     <Text style={s.targetRowTotal}>{item.targetStr}</Text>
@@ -260,7 +314,6 @@ export default function HomeScreen() {
             <Text style={s.checklistProgress}>{done}/{total} done</Text>
           </View>
 
-          {/* Progress bar */}
           <View style={s.progressBg}>
             <View style={[s.progressFill, { width: `${total > 0 ? (done / total) * 100 : 0}%` as any }]} />
           </View>
@@ -291,64 +344,3 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
-
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: AppTheme.bg },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 8 },
-
-  // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  headerLeft: { flex: 1 },
-  greeting: { fontSize: 22, fontWeight: '700', color: AppTheme.textPrimary, marginBottom: 3 },
-  motivation: { fontSize: 13, color: AppTheme.textSecondary },
-  weekBadge: { backgroundColor: AppTheme.primary + '22', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: AppTheme.primary + '55' },
-  weekBadgeText: { color: AppTheme.primary, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-
-  // Day header
-  dayHeader: { marginBottom: 14 },
-  dayNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  dayName: { fontSize: 30, fontWeight: '800', color: AppTheme.textPrimary },
-  backToTodayBtn: { backgroundColor: AppTheme.primary + '22', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: AppTheme.primary + '55' },
-  backToTodayText: { fontSize: 11, fontWeight: '700', color: AppTheme.primary },
-  dayBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
-  badge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1 },
-  badgeText: { fontSize: 12, fontWeight: '600' },
-  workoutFocus: { fontSize: 13, color: AppTheme.textSecondary },
-
-  // Daily Targets card
-  targetsCard: { backgroundColor: AppTheme.bgCard, borderRadius: 16, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, borderWidth: 1, borderColor: AppTheme.border },
-  targetRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  targetRowBorder: { borderBottomWidth: 1, borderBottomColor: AppTheme.border },
-  targetRowEmoji: { fontSize: 15, width: 22, textAlign: 'center' },
-  targetRowLabel: { fontSize: 12, color: AppTheme.textSecondary, width: 58 },
-  targetRowBar: { flex: 1, height: 4, backgroundColor: AppTheme.bgCardAlt, borderRadius: 2, overflow: 'hidden' },
-  targetRowFill: { height: 4, borderRadius: 2 },
-  targetRowValue: { fontSize: 12, fontWeight: '700', textAlign: 'right', minWidth: 42 },
-  targetRowSep: { fontSize: 11, color: AppTheme.textMuted, fontWeight: '400' },
-  targetRowTotal: { fontSize: 11, color: AppTheme.textMuted, fontWeight: '400' },
-
-  // Section
-  section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: AppTheme.textPrimary, marginBottom: 10 },
-
-  // Checklist header
-  checklistTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  checklistProgress: { fontSize: 13, fontWeight: '700', color: AppTheme.primary },
-  progressBg: { height: 4, backgroundColor: AppTheme.bgCardAlt, borderRadius: 2, marginBottom: 12, overflow: 'hidden' },
-  progressFill: { height: 4, backgroundColor: AppTheme.primary, borderRadius: 2 },
-  allDone: { backgroundColor: AppTheme.success + '22', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: AppTheme.success + '44', marginBottom: 10 },
-  allDoneText: { fontSize: 13, color: AppTheme.success, textAlign: 'center', fontWeight: '600' },
-  timeline: { paddingLeft: 2 },
-
-  // Weekly calendar
-  weekRow: { gap: 10, paddingRight: 16 },
-  dayPill: { backgroundColor: AppTheme.bgCard, borderRadius: 12, padding: 12, alignItems: 'center', minWidth: 68, borderWidth: 1, borderColor: AppTheme.border },
-  dayPillActive: { borderColor: AppTheme.primary, backgroundColor: AppTheme.primary + '15' },
-  todayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: AppTheme.primary, marginBottom: 4 },
-  dayPillName: { fontSize: 11, fontWeight: '700', color: AppTheme.textSecondary, letterSpacing: 0.5, marginBottom: 2 },
-  dayPillDate: { fontSize: 18, fontWeight: '800', color: AppTheme.textPrimary, marginBottom: 6 },
-  dayPillTypeDot: { width: 6, height: 6, borderRadius: 3 },
-
-  bottomPad: { height: 24 },
-});

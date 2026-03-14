@@ -1,4 +1,4 @@
-// Shared constants used across multiple screens
+// Shared constants and utilities used across the app
 
 export const DAYS = [
   'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
@@ -8,21 +8,37 @@ export function getTodayId(): string {
   return DAYS[new Date().getDay()];
 }
 
+/** Single source of truth for all AsyncStorage keys. */
 export const STORAGE_KEYS = {
-  WORKOUTS: '@lydia/workouts',
-  WATER:    '@lydia/water',
-  WEIGHTS:  '@lydia/weights',
+  // Fitness logs
+  WORKOUTS:      '@peakroutine/workouts',
+  WATER:         '@peakroutine/water',
+  WEIGHTS:       '@peakroutine/weights',
+  HABITS:        '@peakroutine/habits',
+  // Meal tracking
+  MEAL_LOGS:     '@peakroutine/meal_logs',
+  BARCODE_CACHE: '@peakroutine/barcode_cache',
+  AI_MEALS:      '@peakroutine/ai_meals',
+  // Settings
+  AI_ENABLED:    '@peakroutine/ai_enabled',
+  AVATAR:        '@peakroutine/avatar_emoji',
+  THEME:         '@peakroutine/theme',
+  // Auth / onboarding
+  ONBOARDING:    '@peakroutine/onboarding_complete',
+  BIOMETRIC:     '@peakroutine/biometric_enabled',
+  // Profile
+  PROFILE:       '@peakroutine/user_profile',
 } as const;
 
-// Mon Tue Wed Thu Sat
+// Default gym days: Mon Tue Wed Thu Sat
 export const GYM_DAYS = [1, 2, 3, 4, 6];
 
 export function toKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function isGymDay(d: Date): boolean {
-  return GYM_DAYS.includes(d.getDay());
+export function isGymDay(d: Date, gymDays?: number[]): boolean {
+  return (gymDays ?? GYM_DAYS).includes(d.getDay());
 }
 
 export function getWeekDates(): Date[] {

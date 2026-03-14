@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { logger } from './logger';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -12,18 +13,25 @@ Notifications.setNotificationHandler({
 });
 
 export async function requestNotificationPermissions(): Promise<boolean> {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('lydia-reminders', {
-      name: "Lydia's Reminders",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#a855f7',
-    });
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('lydia-reminders', {
+        name: "Lydia's Reminders",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#a855f7',
+      });
+    }
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === 'granted') return true;
+    const { status } = await Notifications.requestPermissionsAsync();
+    const granted = status === 'granted';
+    logger.info('notifications', 'requestPermissions', 'Permission result', { granted });
+    return granted;
+  } catch (e) {
+    logger.error('notifications', 'requestPermissions', 'Failed to request permissions', { error: String(e) });
+    return false;
   }
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === 'granted') return true;
-  const { status } = await Notifications.requestPermissionsAsync();
-  return status === 'granted';
 }
 
 interface DailyReminder {
@@ -32,7 +40,7 @@ interface DailyReminder {
   body: string;
   hour: number;
   minute: number;
-  weekday?: number; // 1=Monday ... 7=Sunday (undefined = every day)
+  weekday?: number; // 1=Monday … 7=Sunday (undefined = every day)
 }
 
 const DAILY_REMINDERS: DailyReminder[] = [
@@ -62,32 +70,57 @@ const DAILY_REMINDERS: DailyReminder[] = [
 ];
 
 export async function scheduleAllReminders(): Promise<void> {
-  const granted = await requestNotificationPermissions();
-  if (!granted) return;
+  try {
+    const granted = await requestNotificationPermissions();
+    if (!granted) {
+      logger.info('notifications', 'scheduleAll', 'Permission not granted — skipping');
+      return;
+    }
 
-  // Cancel existing ones
-  await Notifications.cancelAllScheduledNotificationsAsync();
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    logger.info('notifications', 'scheduleAll', 'Scheduling reminders', { count: DAILY_REMINDERS.length });
 
-  for (const reminder of DAILY_REMINDERS) {
-    await Notifications.scheduleNotificationAsync({
-      identifier: reminder.id,
-      content: {
-        title: reminder.title,
-        body: reminder.body,
-        sound: true,
-        data: { id: reminder.id },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-        weekday: reminder.weekday ?? undefined,
-        hour: reminder.hour,
-        minute: reminder.minute,
-        repeats: true,
-      } as any,
+    let scheduled = 0;
+    for (const reminder of DAILY_REMINDERS) {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: reminder.id,
+          content: {
+            title: reminder.title,
+            body:  reminder.body,
+            sound: true,
+            data:  { id: reminder.id },
+          },
+          trigger: {
+            type:    Notifications.SchedulableTriggerInputTypes.WEEKLY,
+            weekday: reminder.weekday ?? undefined,
+            hour:    reminder.hour,
+            minute:  reminder.minute,
+            repeats: true,
+          } as any,
+        });
+        scheduled++;
+      } catch (e) {
+        // One failed reminder should not cancel the rest
+        logger.warn('notifications', 'scheduleAll', 'Failed to schedule reminder', {
+          id: reminder.id, error: String(e),
+        });
+      }
+    }
+
+    logger.info('notifications', 'scheduleAll', 'Scheduling complete', {
+      scheduled, total: DAILY_REMINDERS.length,
     });
+  } catch (e) {
+    logger.error('notifications', 'scheduleAll', 'Unexpected error during scheduling', { error: String(e) });
   }
 }
 
 export async function cancelAllReminders(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    logger.info('notifications', 'cancelAll', 'All reminders cancelled');
+  } catch (e) {
+    logger.error('notifications', 'cancelAll', 'Failed to cancel reminders', { error: String(e) });
+  }
 }

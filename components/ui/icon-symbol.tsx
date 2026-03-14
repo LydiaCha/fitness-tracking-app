@@ -18,6 +18,8 @@ const MAPPING = {
   'pills.fill': 'medication',
   'chart.bar.fill': 'bar-chart',
   'checkmark.circle.fill': 'check-circle',
+  'fork.knife.circle.fill': 'restaurant-menu',
+  'person.circle.fill': 'account-circle',
 } as IconMapping;
 
 export function IconSymbol({

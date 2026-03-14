@@ -1,0 +1,44 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="peakGrad" x1="0" y1="1" x2="1" y2="0" gradientUnits="objectBoundingBox">
+      <stop offset="0%"   stop-color="#a855f7"/>
+      <stop offset="45%"  stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="70%" r="50%">
+      <stop offset="0%"   stop-color="#7c3aed" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- App icon background (rounded square) -->
+  <rect width="1024" height="1024" rx="224" fill="#0D0D1A"/>
+
+  <!-- Subtle background glow -->
+  <ellipse cx="512" cy="680" rx="420" ry="280" fill="url(#glow)"/>
+
+  <!--
+    Mountain peak chevron
+    Apex:        512, 192
+    Outer left:  164, 768
+    Inner left:  308, 768
+    Inner right: 716, 768
+    Outer right: 860, 768
+    Leg width:   144px  ·  inner gap: 408px
+  -->
+  <path
+    d="M 512 192
+       L 860 768
+       L 716 768
+       L 512 424
+       L 308 768
+       L 164 768
+       Z"
+    fill="url(#peakGrad)"
+  />
+
+  <!-- Three tracking dots — suggest routine / daily habit -->
+  <circle cx="346" cy="840" r="28" fill="url(#peakGrad)" opacity="0.50"/>
+  <circle cx="512" cy="840" r="28" fill="url(#peakGrad)" opacity="0.75"/>
+  <circle cx="678" cy="840" r="28" fill="url(#peakGrad)" opacity="0.50"/>
+</svg>

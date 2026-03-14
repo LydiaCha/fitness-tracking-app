@@ -4,20 +4,21 @@ import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { AppTheme } from '@/constants/theme';
+import { useAppTheme } from '@/context/ThemeContext';
 
 export default function TabLayout() {
+  const { theme } = useAppTheme();
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: AppTheme.primary,
-        tabBarInactiveTintColor: AppTheme.textMuted,
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textMuted,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          backgroundColor: AppTheme.bgCard,
-          borderTopColor: AppTheme.border,
+          backgroundColor: theme.bgCard,
+          borderTopColor: theme.border,
           borderTopWidth: 1,
           paddingBottom: Platform.OS === 'ios' ? 0 : 4,
         },
@@ -29,15 +30,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Today',
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Calendar',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="calendar" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -49,6 +43,26 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="supplements"
+        options={{
+          title: 'Supplements',
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="pills.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="person.circle.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="meal-tracker"
         options={{
           href: null,
         }}
