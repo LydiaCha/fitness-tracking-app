@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { useScrollToTop } from '@react-navigation/native';
 import {
   View,
   Text,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   TextInput,
   StatusBar,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppThemeType } from '@/constants/theme';
+import { createNutritionStyles } from './nutrition.styles';
 import { useAppTheme } from '@/context/ThemeContext';
 import { STORAGE_KEYS, toKey, isGymDay, getWeekDates } from '@/utils/appConstants';
 import { getPeriodScore, getDatesForPeriod, scoreColor, calcWorkoutStreak } from '@/utils/calculations';
@@ -36,222 +37,202 @@ const PERIODS: { value: Period; label: string }[] = [
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-// ─── Weight Chart styles ──────────────────────────────────────────────────────
-function useChartStyles(theme: AppThemeType) {
-  return useMemo(() => StyleSheet.create({
-    trendRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-    trendLabel: { fontSize: 12, color: theme.textMuted },
-    trendRange: { fontSize: 12, color: theme.textMuted },
-    trendBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
-    trendText:  { fontSize: 12, fontWeight: '700' },
-    chartWrap:  { position: 'relative' },
-    guideLine:  { position: 'absolute', left: 0, right: 0, height: 1 },
-    segment:    { position: 'absolute', height: 3, borderRadius: 1.5 },
-    dot:        { position: 'absolute', borderRadius: 99 },
-    latestLabel:{ position: 'absolute', width: 48, textAlign: 'center', fontSize: 10, fontWeight: '700' },
-    axisLabel:  { position: 'absolute', width: 36, textAlign: 'center', fontSize: 8 },
-  }), [theme]);
+// ─── Weight Chart ─────────────────────────────────────────────────────────────
+type ChartRange = '30d' | '90d' | 'all';
+const CHART_RANGES: { value: ChartRange; label: string }[] = [
+  { value: '30d', label: '30D' },
+  { value: '90d', label: '90D' },
+  { value: 'all', label: 'All' },
+];
+
+function filterByRange(entries: WeightEntry[], range: ChartRange): WeightEntry[] {
+  if (range === 'all') return entries;
+  const days = range === '30d' ? 30 : 90;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  return entries.filter(e => e.date >= cutoffStr);
 }
 
-// ─── Weight Chart (line chart) ────────────────────────────────────────────────
 function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThemeType }) {
-  const cs = useChartStyles(theme);
-  const [width, setWidth] = useState(0);
-  const data = entries.slice(-14);
+  const [range, setRange]   = useState<ChartRange>('90d');
+  const [width, setWidth]   = useState(0);
+  const data = filterByRange(entries, range);
 
-  if (data.length === 0) return null;
+  const CHART_H = 160;
+  const PAD_TOP = 12;
+  const PAD_BOT = 24;  // room for x-axis labels
+  const Y_AXIS  = 36;  // room for y-axis labels on left
 
-  const CHART_H  = 90;
-  const PAD_X    = 8;
-  const PAD_Y    = 10;
-  const vals     = data.map(e => e.kg);
-  const minV     = Math.min(...vals) - 0.5;
-  const maxV     = Math.max(...vals) + 0.5;
-  const range    = maxV - minV || 1;
-  const usableW  = Math.max(width - PAD_X * 2, 1);
+  const vals   = data.map(e => e.kg);
+  const rawMin = data.length ? Math.min(...vals) : 0;
+  const rawMax = data.length ? Math.max(...vals) : 1;
+  const padding = Math.max((rawMax - rawMin) * 0.15, 0.5);
+  const minV   = rawMin - padding;
+  const maxV   = rawMax + padding;
+  const range_ = maxV - minV || 1;
+
+  const usableW = Math.max(width - Y_AXIS, 1);
 
   const pts = data.map((e, i) => ({
-    x: PAD_X + (data.length === 1 ? usableW / 2 : (i / (data.length - 1)) * usableW),
-    y: PAD_Y + (1 - (e.kg - minV) / range) * CHART_H,
+    x: Y_AXIS + (data.length === 1 ? usableW / 2 : (i / (data.length - 1)) * usableW),
+    y: PAD_TOP + (1 - (e.kg - minV) / range_) * CHART_H,
     entry: e,
   }));
 
-  const trendUp    = data.length >= 2 && data[data.length - 1].kg > data[data.length - 2].kg;
-  const trendColor = trendUp ? theme.gym : theme.meal;
-  const trendText  = data.length >= 2
-    ? `${trendUp ? '+' : ''}${(data[data.length - 1].kg - data[data.length - 2].kg).toFixed(1)} kg`
-    : null;
+  // Y-axis grid lines at nice round values
+  const gridLines = useMemo(() => {
+    const step = (rawMax - rawMin) < 2 ? 0.5 : (rawMax - rawMin) < 5 ? 1 : 2;
+    const start = Math.ceil(minV / step) * step;
+    const lines: number[] = [];
+    for (let v = start; v <= maxV; v = Math.round((v + step) * 100) / 100) lines.push(v);
+    return lines;
+  }, [minV, maxV, rawMin, rawMax]);
 
-  // Label indices: first, mid, last
-  const labelIdx = [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])];
+  // X-axis: show up to 4 evenly spaced date labels
+  const xLabelIdx = useMemo(() => {
+    if (data.length === 0) return [];
+    if (data.length <= 4) return data.map((_, i) => i);
+    const step = (data.length - 1) / 3;
+    return [0, Math.round(step), Math.round(step * 2), data.length - 1];
+  }, [data.length]);
+
+  const trendUp    = data.length >= 2 && data[data.length - 1].kg > data[0].kg;
+  const totalDelta = data.length >= 2 ? data[data.length - 1].kg - data[0].kg : null;
 
   return (
-    <View onLayout={e => setWidth(e.nativeEvent.layout.width)}>
-      {/* Trend badge row */}
-      <View style={cs.trendRow}>
-        <Text style={cs.trendLabel}>Last {data.length} entries</Text>
-        {trendText && (
-          <View style={[cs.trendBadge, { backgroundColor: trendColor + '22' }]}>
-            <Text style={[cs.trendText, { color: trendColor }]}>{trendText}</Text>
-          </View>
+    <View>
+      {/* Range selector + trend */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+        <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
+          {CHART_RANGES.map(r => (
+            <TouchableOpacity
+              key={r.value}
+              onPress={() => setRange(r.value)}
+              style={{
+                paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8,
+                backgroundColor: range === r.value ? theme.primary : theme.bgCardAlt,
+                borderWidth: 1,
+                borderColor: range === r.value ? theme.primary : theme.border,
+              }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: range === r.value ? '#fff' : theme.textMuted }}>
+                {r.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {totalDelta !== null && (
+          <Text style={{ fontSize: 12, fontWeight: '700', color: trendUp ? theme.gym : theme.meal }}>
+            {trendUp ? '+' : ''}{totalDelta.toFixed(1)} kg
+          </Text>
         )}
-        <Text style={[cs.trendRange, { marginLeft: 'auto' as any }]}>
-          {minV.toFixed(1)}–{maxV.toFixed(1)} kg
-        </Text>
       </View>
 
-      {/* Chart canvas */}
-      {width > 0 && (
-        <View style={[cs.chartWrap, { height: CHART_H + PAD_Y * 2 + 16 }]}>
-          {/* Horizontal guide lines */}
-          {[0, 0.5, 1].map(pct => (
-            <View
-              key={pct}
-              style={[cs.guideLine, {
-                top: PAD_Y + (1 - pct) * CHART_H,
-                backgroundColor: theme.border + '33',
-              }]}
-            />
-          ))}
+      {data.length === 0 ? (
+        <View style={{ height: 80, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 13, color: theme.textMuted }}>No entries in this range</Text>
+        </View>
+      ) : (
+        <View onLayout={e => setWidth(e.nativeEvent.layout.width)}>
+          {width > 0 && (
+            <View style={{ height: CHART_H + PAD_TOP + PAD_BOT, position: 'relative' }}>
 
-          {/* Line segments */}
-          {pts.slice(0, -1).map((p1, i) => {
-            const p2  = pts[i + 1];
-            const dx  = p2.x - p1.x;
-            const dy  = p2.y - p1.y;
-            const len = Math.sqrt(dx * dx + dy * dy);
-            const ang = Math.atan2(dy, dx) * (180 / Math.PI);
-            return (
-              <View
-                key={i}
-                style={[cs.segment, {
-                  left:  (p1.x + p2.x) / 2 - len / 2,
-                  top:   (p1.y + p2.y) / 2 - 1.5,
-                  width: len,
-                  backgroundColor: theme.primary + '99',
-                  transform: [{ rotate: `${ang}deg` }],
-                }]}
-              />
-            );
-          })}
+              {/* Y-axis grid lines + labels */}
+              {gridLines.map(v => {
+                const yPos = PAD_TOP + (1 - (v - minV) / range_) * CHART_H;
+                return (
+                  <React.Fragment key={v}>
+                    <Text style={{
+                      position: 'absolute', left: 0, top: yPos - 7, width: Y_AXIS - 6,
+                      textAlign: 'right', fontSize: 9, color: theme.textMuted, fontWeight: '600',
+                    }}>
+                      {v % 1 === 0 ? v : v.toFixed(1)}
+                    </Text>
+                    <View style={{
+                      position: 'absolute', left: Y_AXIS, right: 0, top: yPos, height: 1,
+                      backgroundColor: theme.border + '44',
+                    }} />
+                  </React.Fragment>
+                );
+              })}
 
-          {/* Dots */}
-          {pts.map((p, i) => {
-            const isLatest = i === pts.length - 1;
-            const size = isLatest ? 12 : 7;
-            return (
-              <View
-                key={i}
-                style={[cs.dot, {
-                  left: p.x - size / 2, top: p.y - size / 2,
-                  width: size, height: size,
-                  backgroundColor: isLatest ? theme.primary : theme.primary + '77',
-                  borderWidth: isLatest ? 2 : 0,
-                  borderColor: theme.bg,
-                }]}
-              />
-            );
-          })}
+              {/* Line segments */}
+              {pts.slice(0, -1).map((p1, i) => {
+                const p2  = pts[i + 1];
+                const dx  = p2.x - p1.x;
+                const dy  = p2.y - p1.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                const ang = Math.atan2(dy, dx) * (180 / Math.PI);
+                return (
+                  <View key={i} style={{
+                    position: 'absolute',
+                    left:  (p1.x + p2.x) / 2 - len / 2,
+                    top:   (p1.y + p2.y) / 2 - 1.5,
+                    width: len, height: 3, borderRadius: 1.5,
+                    backgroundColor: theme.primary,
+                    transform: [{ rotate: `${ang}deg` }],
+                  }} />
+                );
+              })}
 
-          {/* Value label on latest dot */}
-          {pts.length > 0 && (() => {
-            const p = pts[pts.length - 1];
-            return (
-              <Text style={[cs.latestLabel, { left: p.x - 24, top: p.y - 20, color: theme.primary }]}>
-                {data[data.length - 1].kg} kg
-              </Text>
-            );
-          })()}
+              {/* Dots */}
+              {pts.map((p, i) => {
+                const isLatest = i === pts.length - 1;
+                const size = isLatest ? 12 : 6;
+                return (
+                  <View key={i} style={{
+                    position: 'absolute',
+                    left: p.x - size / 2, top: p.y - size / 2,
+                    width: size, height: size, borderRadius: size / 2,
+                    backgroundColor: isLatest ? theme.primary : theme.primary + '66',
+                    borderWidth: isLatest ? 2 : 0,
+                    borderColor: theme.bgCard,
+                  }} />
+                );
+              })}
 
-          {/* X-axis date labels */}
-          {labelIdx.map(i => (
-            <Text
-              key={i}
-              style={[cs.axisLabel, {
-                left: pts[i].x - 18,
-                top: CHART_H + PAD_Y * 2 - 2,
-                color: theme.textMuted,
-              }]}>
-              {pts[i].entry.date.slice(5).replace('-', '/')}
-            </Text>
-          ))}
+              {/* Latest value label */}
+              {pts.length > 0 && (() => {
+                const p = pts[pts.length - 1];
+                return (
+                  <Text style={{
+                    position: 'absolute', left: p.x - 26, top: p.y - 20,
+                    width: 52, textAlign: 'center',
+                    fontSize: 10, fontWeight: '800', color: theme.primary,
+                  }}>
+                    {data[data.length - 1].kg} kg
+                  </Text>
+                );
+              })()}
+
+              {/* X-axis labels */}
+              {xLabelIdx.map(i => (
+                <Text key={i} style={{
+                  position: 'absolute',
+                  left: pts[i].x - 20, top: CHART_H + PAD_TOP + 6,
+                  width: 40, textAlign: 'center',
+                  fontSize: 9, color: theme.textMuted,
+                }}>
+                  {pts[i].entry.date.slice(5).replace('-', '/')}
+                </Text>
+              ))}
+            </View>
+          )}
         </View>
       )}
     </View>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-function useStyles(theme: AppThemeType) {
-  return useMemo(() => StyleSheet.create({
-    safe:         { flex: 1, backgroundColor: theme.bg },
-    scroll:       { flex: 1 },
-    scrollContent:{ paddingHorizontal: 16, paddingTop: 8 },
-    header:       { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
-    headerText:   { flex: 1 },
-    title:        { fontSize: 24, fontWeight: '800', color: theme.textPrimary, marginBottom: 4 },
-    subtitle:     { fontSize: 13, color: theme.textSecondary },
-    themeBtn:     { padding: 6, marginTop: 2 },
-    themeBtnText: { fontSize: 20 },
-
-    // Score Card
-    scoreCard:      { backgroundColor: theme.bgCard, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.border },
-    periodRow:      { flexDirection: 'row', gap: 8, marginBottom: 16 },
-    periodPill:     { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
-    periodText:     { fontSize: 12, fontWeight: '600', color: theme.textMuted },
-    scoreMain:      { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 12 },
-    scorePct:       { fontSize: 48, fontWeight: '800', lineHeight: 54 },
-    scoreRight:     { flex: 1 },
-    scoreBarBg:     { height: 8, backgroundColor: theme.bgCardAlt, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
-    scoreBarFill:   { height: 8, borderRadius: 4 },
-    scoreCount:     { fontSize: 13, color: theme.textSecondary, marginBottom: 6 },
-    scoreBreakdown: { fontSize: 12, color: theme.textMuted, lineHeight: 18 },
-    streakChip:     { backgroundColor: theme.gym + '20', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start', borderWidth: 1, borderColor: theme.gym + '44' },
-    streakChipText: { fontSize: 12, color: theme.gym, fontWeight: '600' },
-
-    // Card
-    card:         { backgroundColor: theme.bgCard, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.border },
-    cardTitle:    { fontSize: 16, fontWeight: '700', color: theme.textPrimary, marginBottom: 12 },
-
-    // Grid
-    gridRow:       { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-    gridIcon:      { width: 28, fontSize: 16, textAlign: 'center' },
-    gridCell:      { flex: 1, alignItems: 'center' },
-    gridDayLetter: { fontSize: 10, color: theme.textMuted, fontWeight: '600' },
-    gridDate:      { fontSize: 9, color: theme.textMuted, marginTop: 1, marginBottom: 4 },
-    gridDot:       { width: 18, height: 18, borderRadius: 9, backgroundColor: theme.bgCardAlt },
-    gridDash:      { fontSize: 12, color: theme.border, marginTop: 5 },
-
-    // Weight
-    weightSummary:  { flexDirection: 'row', alignItems: 'baseline', gap: 12, marginBottom: 4 },
-    weightCurrent:  { fontSize: 30, fontWeight: '800' },
-    weightDelta:    { fontSize: 14, fontWeight: '600' },
-    weightInputRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-    weightInput:    { flex: 1, backgroundColor: theme.bgCardAlt, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, color: theme.textPrimary, borderWidth: 1, borderColor: theme.border },
-    weightBtn:      { backgroundColor: theme.primary, borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center' },
-    weightBtnText:  { fontSize: 14, fontWeight: '700', color: '#fff' },
-    weightHistory:  { marginTop: 14, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 },
-    historyLabel:   { fontSize: 11, color: theme.textMuted, marginBottom: 8, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-    historyRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.border + '55' },
-    historyDate:    { fontSize: 13, color: theme.textSecondary },
-    historyKg:      { fontSize: 13, fontWeight: '700', color: theme.textPrimary },
-    historyHint:    { fontSize: 10, color: theme.textMuted, marginTop: 8, textAlign: 'center' },
-    emptyText:      { fontSize: 13, color: theme.textMuted, textAlign: 'center', marginTop: 16, lineHeight: 20 },
-
-    summaryRow:   { flexDirection: 'row', justifyContent: 'space-around', marginTop: 4 },
-    summaryItem:  { alignItems: 'center' },
-    summaryValue: { fontSize: 22, fontWeight: '800', marginBottom: 4 },
-    summaryLabel: { fontSize: 10, color: theme.textSecondary, textAlign: 'center' },
-  }), [theme]);
-}
-
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ProgressScreen() {
   const { theme, isDark } = useAppTheme();
-  const s = useStyles(theme);
+  const s = useMemo(() => createNutritionStyles(theme), [theme]);
 
   const [workouts, setWorkouts] = useState<DayLog>({});
   const [water,    setWater]    = useState<DayLog>({});
+  const scrollRef = useRef<ScrollView>(null);
+  useScrollToTop(scrollRef);
   const [weights,  setWeights]  = useState<WeightEntry[]>([]);
   const [period,   setPeriod]   = useState<Period>('today');
   const [inputKg,  setInputKg]  = useState('');
@@ -352,7 +333,7 @@ export default function ProgressScreen() {
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
           <View style={s.header}>
             <View style={s.headerText}>

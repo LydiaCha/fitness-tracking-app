@@ -53,6 +53,7 @@ export default function OnboardingDone() {
     try {
       const profile: UserProfile = {
         ...DEFAULT_PROFILE,
+        name:          data.name,
         age,
         gender:        gender  as Gender,
         heightCm,

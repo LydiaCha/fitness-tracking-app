@@ -42,10 +42,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="supplements"
+        name="plan"
         options={{
-          title: 'Supplements',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="pills.fill" color={color} />,
+          title: 'Plan',
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="calendar" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -53,18 +53,6 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="person.circle.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="meal-tracker"
-        options={{
-          href: null,
         }}
       />
     </Tabs>

@@ -14,7 +14,8 @@
         "NSUserNotificationsUsageDescription": "Get reminders for meals, water, workouts and supplements.",
         "NSCameraUsageDescription": "Used to scan food barcodes for meal logging.",
         "NSFaceIDUsageDescription": "Use Face ID to unlock the app quickly and securely."
-      }
+      },
+      "bundleIdentifier": "com.lydiac.peakroutine"
     },
     "android": {
       "adaptiveIcon": {
@@ -29,7 +30,11 @@
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
-        "CAMERA"
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "web": {
@@ -38,7 +43,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
       "expo-camera",
       [
         "expo-splash-screen",

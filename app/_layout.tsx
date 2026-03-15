@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { ThemeProvider, useAppTheme } from '@/context/ThemeContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { MealPlanProvider } from '@/context/MealPlanContext';
+import { WeeklyPlanProvider } from '@/context/WeeklyPlanContext';
 import { scheduleAllReminders } from '@/utils/notifications';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -75,6 +77,8 @@ function AppNavigator() {
         <Stack.Screen name="biometric-gate"  options={{ headerShown: false }} />
         <Stack.Screen name="day/[id]"   options={{ headerShown: false }} />
         <Stack.Screen name="feedback"        options={{ headerShown: false }} />
+        <Stack.Screen name="grocery"          options={{ headerShown: false }} />
+        <Stack.Screen name="settings"        options={{ headerShown: false }} />
         <Stack.Screen name="auth/callback"   options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -87,7 +91,11 @@ export default function RootLayout() {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <AppNavigator />
+          <MealPlanProvider>
+            <WeeklyPlanProvider>
+              <AppNavigator />
+            </WeeklyPlanProvider>
+          </MealPlanProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

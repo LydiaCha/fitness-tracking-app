@@ -1,5 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useScrollToTop } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -8,7 +10,6 @@ import {
   TouchableOpacity,
   StatusBar,
   Alert,
-  Switch,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,8 @@ import {
   DEFAULT_PROFILE, loadUserProfile, saveUserProfile, gymDayLabel,
   DAY_SHORT, DAY_NAMES, ACTIVITY_LABELS, GOAL_LABELS, calcMacroTargets,
 } from '@/constants/userProfile';
+import { ACHIEVEMENTS, AchievementData } from '@/constants/achievements';
+import { createProfileStyles, ProfileStyles } from './profile.styles';
 
 const AI_ENABLED_KEY  = STORAGE_KEYS.AI_ENABLED;
 const AVATAR_KEY      = STORAGE_KEYS.AVATAR;
@@ -111,7 +114,7 @@ function TimePicker({ value, onChange, theme }: {
 }
 
 // ─── Save/Cancel Row ──────────────────────────────────────────────────────────
-function SaveRow({ onSave, onCancel, s }: { onSave: () => void; onCancel: () => void; s: ReturnType<typeof useStyles> }) {
+function SaveRow({ onSave, onCancel, s }: { onSave: () => void; onCancel: () => void; s: ProfileStyles }) {
   return (
     <View style={s.saveRow}>
       <TouchableOpacity style={s.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
@@ -124,121 +127,24 @@ function SaveRow({ onSave, onCancel, s }: { onSave: () => void; onCancel: () => 
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-function useStyles(theme: AppThemeType) {
-  return useMemo(() => StyleSheet.create({
-    safe:         { flex: 1, backgroundColor: theme.bg },
-    scroll:       { flex: 1 },
-    content:      { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 48 },
-
-    avatarRow:    { alignItems: 'center', paddingVertical: 24 },
-    avatar:       { width: 80, height: 80, borderRadius: 40, backgroundColor: theme.primary + '33', alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 2, borderColor: theme.primary + '55' },
-    avatarEmoji:  { fontSize: 38 },
-    name:         { fontSize: 22, fontWeight: '800', color: theme.textPrimary, marginBottom: 4 },
-    tagline:      { fontSize: 13, color: theme.textSecondary },
-
-    statsRow:     { flexDirection: 'row', gap: 10, marginBottom: 24 },
-    statChip:     { flex: 1, backgroundColor: theme.bgCard, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
-    statValue:    { fontSize: 20, fontWeight: '800', marginBottom: 2 },
-    statLabel:    { fontSize: 10, color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
-
-    sectionLabel: { fontSize: 11, fontWeight: '700', color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 8 },
-    card:         { backgroundColor: theme.bgCard, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
-
-    row:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border + '55' },
-    rowLast:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-    rowOpen:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border },
-    rowIcon:      { fontSize: 18, width: 32 },
-    rowLabel:     { flex: 1, fontSize: 15, color: theme.textPrimary, fontWeight: '500' },
-    rowValue:     { fontSize: 13, color: theme.textMuted, maxWidth: 180, textAlign: 'right' },
-    chevron:      { fontSize: 12, color: theme.textMuted, marginLeft: 8 },
-
-    expandArea:     { backgroundColor: theme.bgCardAlt, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: theme.border + '55' },
-    expandAreaLast: { backgroundColor: theme.bgCardAlt, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14 },
-
-    timeLabel:    { fontSize: 10, color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-
-    // Day toggles (gym days)
-    daysRow:      { flexDirection: 'row', gap: 6, marginBottom: 12 },
-    dayBtn:       { flex: 1, aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: theme.border, backgroundColor: theme.bgCard },
-    dayBtnOn:     { backgroundColor: theme.primary + '22', borderColor: theme.primary },
-    dayText:      { fontSize: 12, fontWeight: '700', color: theme.textMuted },
-    dayTextOn:    { color: theme.primary },
-
-    // Macro display
-    macroDisplayGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 14, gap: 8 },
-    macroDisplayItem: { width: '47%', backgroundColor: theme.bgCardAlt, borderRadius: 10, padding: 12 },
-    macroDisplayVal:  { fontSize: 22, fontWeight: '800', marginBottom: 2 },
-    macroDisplayLbl:  { fontSize: 11, color: theme.textMuted },
-
-    macroGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
-    macroField:   { width: '47%' },
-    macroInput:   { backgroundColor: theme.bgCard, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 10, fontSize: 18, fontWeight: '700', color: theme.textPrimary, borderWidth: 1, borderColor: theme.border },
-
-    // Save row
-    saveRow:      { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
-    saveBtn:      { backgroundColor: theme.primary, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 8 },
-    saveBtnText:  { fontSize: 13, fontWeight: '700', color: '#fff' },
-    cancelBtn:    { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: theme.border },
-    cancelBtnText:{ fontSize: 13, color: theme.textMuted },
-
-    // Pill options
-    pillRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-    pill:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bgCard },
-    pillOn:       { backgroundColor: theme.primary + '22', borderColor: theme.primary },
-    pillText:     { fontSize: 13, color: theme.textMuted, fontWeight: '500' },
-    pillTextOn:   { color: theme.primary, fontWeight: '700' },
-
-    // Metric inputs
-    metricGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
-    metricField:  { width: '47%' },
-    metricInput:  { backgroundColor: theme.bgCard, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 10, fontSize: 16, fontWeight: '700', color: theme.textPrimary, borderWidth: 1, borderColor: theme.border },
-
-    calcBtn:      { backgroundColor: theme.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginBottom: 4 },
-    calcBtnText:  { fontSize: 14, fontWeight: '700', color: '#fff' },
-
-    // Weekly schedule day rows
-    dayRow:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border + '55' },
-    dayRowOpen:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border },
-    dayRowLast:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
-    dayName:      { fontSize: 13, fontWeight: '700', color: theme.textPrimary, width: 36 },
-    todayBadge:   { backgroundColor: theme.primary + '33', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginRight: 6 },
-    todayText:    { fontSize: 9, fontWeight: '800', color: theme.primary, textTransform: 'uppercase' },
-    dayTags:      { flex: 1, flexDirection: 'row', gap: 4, flexWrap: 'wrap' },
-    dayTag:       { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: theme.bgCardAlt },
-    dayTagText:   { fontSize: 10, fontWeight: '600', color: theme.textMuted },
-    daySleep:     { fontSize: 11, color: theme.textMuted, marginLeft: 4 },
-
-    workToggleRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-    workToggleBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bgCard },
-    workToggleBtnOn: { backgroundColor: theme.primary + '22', borderColor: theme.primary },
-    workToggleText:  { fontSize: 13, fontWeight: '600', color: theme.textMuted },
-    workToggleTextOn:{ color: theme.primary },
-
-    // Switch rows
-    rowSwitch:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.border + '55' },
-    rowSwitchLast:{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13 },
-    switchSub:    { fontSize: 12, color: theme.textMuted, marginTop: 1 },
-
-    dangerText:   { fontSize: 15, color: theme.error, fontWeight: '500' },
-    versionText:  { fontSize: 12, color: theme.textMuted, textAlign: 'center', marginTop: 16 },
-  }), [theme]);
-}
-
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const { theme, isDark, toggleTheme } = useAppTheme();
   const router = useRouter();
-  const s = useStyles(theme);
+  const s = useMemo(() => createProfileStyles(theme), [theme]);
 
   const [profile,   setProfile]   = useState<UserProfile>(DEFAULT_PROFILE);
   const [draft,     setDraft]     = useState<UserProfile>(DEFAULT_PROFILE);
-  const [expanded,  setExpanded]  = useState<Section>(null);
+  const [expanded,     setExpanded]     = useState<Section>(null);
+  const [expandedWork, setExpandedWork] = useState<number | null>(null);
   const [streak,    setStreak]    = useState(0);
   const [weightKg,  setWeightKg]  = useState<number | null>(null);
   const [aiEnabled,    setAiEnabled]    = useState(true);
   const [avatarEmoji,  setAvatarEmoji]  = useState('💪');
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [achievementData, setAchievementData] = useState<AchievementData | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  useScrollToTop(scrollRef);
 
   useFocusEffect(useCallback(() => {
     Promise.all([
@@ -247,7 +153,10 @@ export default function ProfileScreen() {
       safeGetItem(STORAGE_KEYS.WEIGHTS),
       safeGetItem(AI_ENABLED_KEY),
       safeGetItem(AVATAR_KEY),
-    ]).then(([prof, wo, wt, ai, av]) => {
+      safeGetItem(STORAGE_KEYS.WATER),
+      safeGetItem(STORAGE_KEYS.MEAL_LOGS),
+      safeGetItem(STORAGE_KEYS.HABITS),
+    ]).then(([prof, wo, wt, ai, av, wa, ml, hab]) => {
       setProfile(prof);
       setDraft(prof);
       const workoutLog = safeParseJSON<Record<string, boolean>>(wo, {});
@@ -256,6 +165,19 @@ export default function ProfileScreen() {
       if (entries.length > 0) setWeightKg(entries[entries.length - 1].kg);
       if (ai !== null) setAiEnabled(safeParseJSON(ai, true));
       if (av) setAvatarEmoji(av);
+
+      const waterLog  = safeParseJSON<Record<string, boolean>>(wa, {});
+      const mealLog   = safeParseJSON<Record<string, unknown[]>>(ml, {});
+      const habitLog  = safeParseJSON<Record<string, unknown>>(hab, {});
+      setAchievementData({
+        workoutStreak:   calcWorkoutStreak(workoutLog, prof.gymDays),
+        totalWorkouts:   Object.values(workoutLog).filter(Boolean).length,
+        mealLogDays:     Object.values(mealLog).filter(v => Array.isArray(v) && v.length > 0).length,
+        waterLogDays:    Object.values(waterLog).filter(Boolean).length,
+        supplementDays:  Object.keys(habitLog).length,
+        weightEntries:   entries.length,
+        profileComplete: !!prof.heightCm && !!prof.weightKg && !!prof.fitnessGoal,
+      });
     }).catch(e => {
       logger.error('storage', 'profile_load', 'Failed to load profile data', { error: String(e) });
     });
@@ -277,6 +199,7 @@ export default function ProfileScreen() {
     const previous = profile;
     setProfile(draft);
     setExpanded(null);
+    setExpandedWork(null);
     try {
       await saveUserProfile(draft);
     } catch (e) {
@@ -291,6 +214,7 @@ export default function ProfileScreen() {
   const handleCancel = useCallback(() => {
     setDraft({ ...profile, weekSchedule: profile.weekSchedule.map(d => ({ ...d })) });
     setExpanded(null);
+    setExpandedWork(null);
   }, [profile]);
 
   const toggleGymDay = useCallback((day: number) => {
@@ -352,7 +276,15 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
-      <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+
+        {/* ── Header ── */}
+        <View style={s.headerRow}>
+          <Text style={s.headerTitle}>Profile</Text>
+          <TouchableOpacity onPress={() => router.push('/settings')} activeOpacity={0.7}>
+            <Ionicons name="settings-outline" size={24} color={theme.textMuted} />
+          </TouchableOpacity>
+        </View>
 
         {/* ── Avatar ── */}
         <View style={s.avatarRow}>
@@ -408,13 +340,27 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ── Weekly Schedule ── */}
-        <Text style={s.sectionLabel}>Weekly Schedule</Text>
+        {/* ── Achievements ── */}
+        <Text style={s.sectionLabel}>Achievements</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.badgeScroll} contentContainerStyle={s.badgeScrollContent}>
+          {ACHIEVEMENTS.map(a => {
+            const earned = achievementData ? a.unlocked(achievementData) : false;
+            return (
+              <View key={a.id} style={[s.badgeCard, earned && s.badgeCardEarned]}>
+                <Text style={[s.badgeEmoji, !earned && s.badgeLocked]}>{a.emoji}</Text>
+                <Text style={[s.badgeName, earned ? s.badgeNameEarned : s.badgeNameLocked]} numberOfLines={2}>{a.name}</Text>
+                {earned && <View style={s.badgeDot} />}
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        {/* ── Sleep Schedule ── */}
+        <Text style={s.sectionLabel}>Sleep Schedule</Text>
         <View style={s.card}>
           {([0,1,2,3,4,5,6] as number[]).map((day, idx, arr) => {
             const dayData  = profile.weekSchedule[day];
             const isToday  = day === todayDayIndex;
-            const isGym    = profile.gymDays.includes(day);
             const isOpen   = expanded === day;
             const draftDay = draft.weekSchedule[day];
             const isLast   = idx === arr.length - 1;
@@ -425,22 +371,10 @@ export default function ProfileScreen() {
                 <TouchableOpacity style={rowStyle} onPress={() => openSection(day)} activeOpacity={0.7}>
                   <Text style={[s.dayName, isToday && { color: theme.primary }]}>{DAY_NAMES[day]}</Text>
                   {isToday && <View style={s.todayBadge}><Text style={s.todayText}>Today</Text></View>}
-                  <View style={s.dayTags}>
-                    {dayData.isWorkDay && (
-                      <View style={[s.dayTag, { backgroundColor: theme.class + '22' }]}>
-                        <Text style={[s.dayTagText, { color: theme.class }]}>Work</Text>
-                      </View>
-                    )}
-                    {isGym && (
-                      <View style={[s.dayTag, { backgroundColor: theme.gym + '22' }]}>
-                        <Text style={[s.dayTagText, { color: theme.gym }]}>Gym</Text>
-                      </View>
-                    )}
-                    {!dayData.isWorkDay && !isGym && (
-                      <View style={s.dayTag}><Text style={s.dayTagText}>Rest</Text></View>
-                    )}
-                  </View>
-                  <Text style={s.daySleep}>{dayData.wakeTime.replace(':00', '')}</Text>
+                  <View style={{ flex: 1 }} />
+                  <Text style={s.daySleep}>
+                    {dayData.sleepTime.replace(':00', '')} → {dayData.wakeTime.replace(':00', '')}
+                  </Text>
                   <Text style={s.chevron}>{isOpen ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
 
@@ -452,34 +386,78 @@ export default function ProfileScreen() {
                     <Text style={s.timeLabel}>☀️ Wake time</Text>
                     <TimePicker value={draftDay.wakeTime} onChange={v => updateDay(day, 'wakeTime', v)} theme={theme} />
                     <View style={{ height: 16 }} />
+                    <SaveRow onSave={handleSave} onCancel={handleCancel} s={s} />
+                  </View>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </View>
 
-                    <Text style={s.timeLabel}>💻 Work day?</Text>
-                    <View style={s.workToggleRow}>
-                      {(['Yes', 'No'] as const).map(opt => {
-                        const active = opt === 'Yes' ? draftDay.isWorkDay : !draftDay.isWorkDay;
-                        return (
-                          <TouchableOpacity
-                            key={opt}
-                            style={[s.workToggleBtn, active && s.workToggleBtnOn]}
-                            onPress={() => updateDay(day, 'isWorkDay', opt === 'Yes')}
-                            activeOpacity={0.7}>
-                            <Text style={[s.workToggleText, active && s.workToggleTextOn]}>{opt}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+        {/* ── Work Schedule ── */}
+        <Text style={s.sectionLabel}>Work Schedule</Text>
+        <View style={s.card}>
+          {/* Work day toggles */}
+          <View style={[s.expandArea, { borderBottomWidth: 1, borderBottomColor: theme.border + '55' }]}>
+            <Text style={s.timeLabel}>💻 Work days</Text>
+            <View style={s.daysRow}>
+              {DAY_SHORT.map((d, i) => {
+                const on = draft.weekSchedule[i].isWorkDay;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    style={[s.dayBtn, on && { backgroundColor: theme.class + '22', borderColor: theme.class }]}
+                    onPress={() => {
+                      setDraft(prev => ({
+                        ...prev,
+                        weekSchedule: prev.weekSchedule.map((ds, idx) =>
+                          idx === i ? { ...ds, isWorkDay: !ds.isWorkDay } : ds
+                        ),
+                      }));
+                    }}
+                    activeOpacity={0.7}>
+                    <Text style={[s.dayText, on && { color: theme.class }]}>{d}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <SaveRow onSave={handleSave} onCancel={handleCancel} s={s} />
+          </View>
 
-                    {draftDay.isWorkDay && (
-                      <>
-                        <Text style={s.timeLabel}>Work start</Text>
-                        <TimePicker value={draftDay.workStart} onChange={v => updateDay(day, 'workStart', v)} theme={theme} />
-                        <View style={{ height: 16 }} />
-                        <Text style={s.timeLabel}>Work end</Text>
-                        <TimePicker value={draftDay.workEnd} onChange={v => updateDay(day, 'workEnd', v)} theme={theme} />
-                        <View style={{ height: 16 }} />
-                      </>
-                    )}
+          {/* Per-work-day hours */}
+          {([0,1,2,3,4,5,6] as number[]).map((day, idx, arr) => {
+            const draftDay = draft.weekSchedule[day];
+            if (!draftDay.isWorkDay) return null;
+            const isOpen = expandedWork === day;
+            const isLast = idx === arr.length - 1 || arr.slice(idx + 1).every(d => !draft.weekSchedule[d].isWorkDay);
+            const rowStyle = isOpen ? s.dayRowOpen : isLast ? s.dayRowLast : s.dayRow;
 
+            return (
+              <React.Fragment key={day}>
+                <TouchableOpacity
+                  style={rowStyle}
+                  onPress={() => {
+                    setDraft({ ...profile, weekSchedule: profile.weekSchedule.map(d => ({ ...d })) });
+                    setExpandedWork(prev => prev === day ? null : day);
+                  }}
+                  activeOpacity={0.7}>
+                  <Text style={[s.dayName, day === todayDayIndex && { color: theme.primary }]}>{DAY_NAMES[day]}</Text>
+                  {day === todayDayIndex && <View style={s.todayBadge}><Text style={s.todayText}>Today</Text></View>}
+                  <View style={{ flex: 1 }} />
+                  <Text style={s.daySleep}>
+                    {draftDay.workStart.replace(':00', '')} → {draftDay.workEnd.replace(':00', '')}
+                  </Text>
+                  <Text style={s.chevron}>{isOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {isOpen && (
+                  <View style={[s.expandArea, isLast && { borderBottomWidth: 0 }]}>
+                    <Text style={s.timeLabel}>Work start</Text>
+                    <TimePicker value={draftDay.workStart} onChange={v => updateDay(day, 'workStart', v)} theme={theme} />
+                    <View style={{ height: 16 }} />
+                    <Text style={s.timeLabel}>Work end</Text>
+                    <TimePicker value={draftDay.workEnd} onChange={v => updateDay(day, 'workEnd', v)} theme={theme} />
+                    <View style={{ height: 16 }} />
                     <SaveRow onSave={handleSave} onCancel={handleCancel} s={s} />
                   </View>
                 )}
@@ -651,79 +629,16 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* ── Appearance ── */}
-        <Text style={s.sectionLabel}>Appearance</Text>
+        {/* ── Plan ── */}
+        <Text style={s.sectionLabel}>Plan</Text>
         <View style={s.card}>
-          <View style={s.rowSwitchLast}>
-            <Text style={s.rowIcon}>{isDark ? '🌙' : '☀️'}</Text>
-            <Text style={s.rowLabel}>{isDark ? 'Dark mode' : 'Light mode'}</Text>
-            <Switch
-              value={isDark}
-              onValueChange={toggleTheme}
-              trackColor={{ false: theme.border, true: theme.primary + '88' }}
-              thumbColor={isDark ? theme.primary : theme.textMuted}
-            />
-          </View>
-        </View>
-
-        {/* ── AI Features ── */}
-        <Text style={s.sectionLabel}>AI Features</Text>
-        <View style={s.card}>
-          <View style={s.rowSwitch}>
-            <Text style={s.rowIcon}>✨</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowLabel}>AI Meal Suggestions</Text>
-              <Text style={s.switchSub}>Uses your schedule for personalised ideas</Text>
-            </View>
-            <Switch
-              value={aiEnabled}
-              onValueChange={toggleAI}
-              trackColor={{ false: theme.border, true: theme.primary + '88' }}
-              thumbColor={aiEnabled ? theme.primary : theme.textMuted}
-            />
-          </View>
-          <View style={s.rowSwitchLast}>
-            <Text style={s.rowIcon}>🤖</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowLabel}>AI Food Photo</Text>
-              <Text style={s.switchSub}>Identify food from your camera</Text>
-            </View>
-            <Text style={{ fontSize: 13, color: aiEnabled ? theme.meal : theme.textMuted, fontWeight: '600' }}>
-              {aiEnabled ? 'On' : 'Off'}
-            </Text>
-          </View>
-        </View>
-
-        {/* ── Data & Privacy ── */}
-        <Text style={s.sectionLabel}>Data & Privacy</Text>
-        <View style={s.card}>
-          {[
-            { icon: '🍽️', label: 'Clear meal logs',           keys: [MEAL_LOGS_KEY] },
-            { icon: '⚖️', label: 'Clear weight log',           keys: [STORAGE_KEYS.WEIGHTS], onDone: () => setWeightKg(null) },
-            { icon: '💪', label: 'Clear workout & water logs', keys: [STORAGE_KEYS.WORKOUTS, STORAGE_KEYS.WATER], onDone: () => setStreak(0) },
-            { icon: '🗄️', label: 'Clear AI & barcode cache',   keys: [AI_MEALS_KEY, BARCODE_CACHE] },
-          ].map(({ icon, label, keys, onDone }, i, arr) => (
-            <TouchableOpacity
-              key={label}
-              style={i < arr.length - 1 ? s.row : s.rowLast}
-              onPress={() => clearData(label.replace('Clear ', ''), keys, onDone)}>
-              <Text style={s.rowIcon}>{icon}</Text>
-              <Text style={[s.rowLabel, s.dangerText]}>{label}</Text>
+          <View style={{ padding: 16 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: theme.textPrimary, marginBottom: 4 }}>🛒 Weekly Grocery List</Text>
+            <Text style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 14 }}>Auto-generated from your 7-day meal plan</Text>
+            <TouchableOpacity style={s.groceryCta} onPress={() => router.push('/(tabs)/plan')} activeOpacity={0.8}>
+              <Text style={s.groceryCtaText}>Generate List →</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* ── Feedback ── */}
-        <Text style={s.sectionLabel}>Feedback</Text>
-        <View style={s.card}>
-          <TouchableOpacity style={s.rowLast} onPress={sendFeedback} activeOpacity={0.7}>
-            <Text style={s.rowIcon}>💬</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowLabel}>Send feedback</Text>
-              <Text style={s.switchSub}>Share a rating and message</Text>
-            </View>
-            <Text style={s.chevron}>›</Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={s.versionText}>PeakRoutine v1.0.0</Text>

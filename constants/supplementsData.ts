@@ -120,9 +120,3 @@ export const SUPPLEMENTS: Supplement[] = [
   },
 ];
 
-export const DAILY_SUPPLEMENT_SCHEDULE = [
-  { time: 'On Wake (4:30–5 PM)', supplements: ['vitaminD', 'omega3', 'vitaminC'] },
-  { time: 'Post-Workout', supplements: ['whey', 'creatine', 'electrolytes'] },
-  { time: 'Rest Day (any meal)', supplements: ['creatine'] },
-  { time: 'Pre-Sleep (8–8:30 AM)', supplements: ['casein', 'magnesium'] },
-];

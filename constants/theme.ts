@@ -1,27 +1,6 @@
 /**
- * Lydia Schedule App — Theme tokens
+ * PeakRoutine — Theme tokens
  */
-
-import { Platform } from 'react-native';
-
-export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: '#a855f7',
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: '#a855f7',
-  },
-  dark: {
-    text: '#F0F0FF',
-    background: '#0D0D1A',
-    tint: '#a855f7',
-    icon: '#8B8BAD',
-    tabIconDefault: '#8B8BAD',
-    tabIconSelected: '#a855f7',
-  },
-};
 
 export const AppThemeDark = {
   bg: '#0D0D1A',
@@ -88,23 +67,3 @@ export const AppTheme = AppThemeDark;
 
 export type AppThemeType = typeof AppThemeDark;
 
-export const Fonts = Platform.select({
-  ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});

@@ -2,8 +2,11 @@ import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/utils/supabase';
 import { logger } from '@/utils/logger';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthCallbackScreen() {
   const router = useRouter();

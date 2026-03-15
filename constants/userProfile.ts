@@ -9,11 +9,15 @@ export interface DaySchedule {
   isWorkDay: boolean;
 }
 
+const WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+const DEFAULT_WORK_DAYS = [1, 2, 3, 4]; // Mon–Thu
+
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 export type FitnessGoal   = 'lose' | 'maintain' | 'gain';
 export type Gender        = 'female' | 'male' | 'other';
 
 export interface UserProfile {
+  name:          string;
   weekSchedule:  DaySchedule[];   // index 0=Sun … 6=Sat
   gymDays:       number[];
   age:           number;
@@ -37,14 +41,14 @@ const DEFAULT_DAY: DaySchedule = {
 };
 
 function makeDefaultWeek(): DaySchedule[] {
-  // Mon–Thu are work nights; Sun/Fri/Sat = rest
-  return [0,1,2,3,4,5,6].map(d => ({
+  return WEEK_DAYS.map(d => ({
     ...DEFAULT_DAY,
-    isWorkDay: [1,2,3,4].includes(d),
+    isWorkDay: DEFAULT_WORK_DAYS.includes(d),
   }));
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
+  name:          '',
   weekSchedule:  makeDefaultWeek(),
   gymDays:       [1, 2, 3, 4, 6],
   age:           30,
@@ -122,8 +126,8 @@ export async function loadUserProfile(): Promise<UserProfile> {
       workEnd:   (saved.workEnd   as string) ?? DEFAULT_DAY.workEnd,
       isWorkDay: true,
     };
-    saved.weekSchedule = [0,1,2,3,4,5,6].map(d => ({
-      ...base, isWorkDay: [1,2,3,4].includes(d),
+    saved.weekSchedule = WEEK_DAYS.map(d => ({
+      ...base, isWorkDay: DEFAULT_WORK_DAYS.includes(d),
     }));
   }
   return { ...DEFAULT_PROFILE, ...saved };
@@ -139,7 +143,7 @@ export function gymDayLabel(gymDays: number[]): string {
 }
 
 export function buildAISystemPrompt(profile: UserProfile): string {
-  const restDays = ([0,1,2,3,4,5,6] as number[])
+  const restDays = ([...WEEK_DAYS] as number[])
     .filter(d => !profile.gymDays.includes(d))
     .map(d => DAY_NAMES[d])
     .join(', ');

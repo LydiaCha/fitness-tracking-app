@@ -28,6 +28,11 @@ export const STORAGE_KEYS = {
   BIOMETRIC:     '@peakroutine/biometric_enabled',
   // Profile
   PROFILE:       '@peakroutine/user_profile',
+  // AI weekly schedule overlay
+  WEEKLY_PLAN:        '@peakroutine/weekly_plan',
+  AI_MEALS_NEXT_WEEK: '@peakroutine/ai_meals_next_week',
+  // Grocery list checked state (week-scoped, auto-expires on new week)
+  GROCERY_CHECKED:    '@peakroutine/grocery_checked',
 } as const;
 
 // Default gym days: Mon Tue Wed Thu Sat
@@ -50,4 +55,25 @@ export function getWeekDates(): Date[] {
     d.setDate(sun.getDate() + i);
     return d;
   });
+}
+
+/** Returns the 7 dates for the current week, Mon-first (index 0 = Monday). */
+export function getWeekDatesMonFirst(): Date[] {
+  const today  = new Date();
+  const jsDay  = today.getDay(); // 0 = Sun
+  const diff   = jsDay === 0 ? -6 : 1 - jsDay;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+/** Today's Mon-first index (0 = Monday … 6 = Sunday). */
+export function getTodayMonFirst(): number {
+  const jsDay = new Date().getDay();
+  return jsDay === 0 ? 6 : jsDay - 1;
 }
