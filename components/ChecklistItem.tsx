@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { AppTheme, AppThemeType } from '@/constants/theme';
+import { AppTheme } from '@/constants/theme';
 import { createChecklistItemStyles } from './ChecklistItem.styles';
 import { useAppTheme } from '@/context/ThemeContext';
 import { ScheduleEvent } from '@/constants/scheduleData';
-import { SHAKE_RECIPES, MEAL_IDEAS, ShakeRecipe, Meal } from '@/constants/nutritionData';
+import { RecipeCard } from './RecipeCard';
 
 // ─── Module-level helpers ────────────────────────────────────────────────────
 export const EVENT_ICONS: Record<string, string> = {
@@ -30,17 +30,6 @@ export function toggleSetItem(prev: Set<number>, i: number): Set<number> {
   return next;
 }
 
-function MealCatBadge({ category, theme }: { category: string; theme: AppThemeType }) {
-  const color = MEAL_CAT_COLORS[category] ?? theme.primary;
-  return (
-    <View style={{ borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, backgroundColor: color + '30', borderColor: color }}>
-      <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, color }}>
-        {category.replace('-', ' ')}
-      </Text>
-    </View>
-  );
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 interface ChecklistItemProps {
   event: ScheduleEvent;
@@ -54,16 +43,10 @@ interface ChecklistItemProps {
 export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }: ChecklistItemProps) {
   const { theme } = useAppTheme();
   const s = useMemo(() => createChecklistItemStyles(theme), [theme]);
-  const [recipeExpanded, setRecipeExpanded] = useState(false);
   const [crossedLines, setCrossedLines] = useState<Set<number>>(new Set());
-  const [crossedIngredients, setCrossedIngredients] = useState<Set<number>>(new Set());
 
   const color = (theme as Record<string, string>)[event.type] ?? theme.primary;
   const icon = EVENT_ICONS[event.type] ?? '•';
-
-  const recipe = event.recipeId
-    ? (event.recipeType === 'shake' ? SHAKE_RECIPES : MEAL_IDEAS).find(r => r.id === event.recipeId)
-    : undefined;
 
   const detailLines = event.detail?.split('\n') ?? [];
   const hasBullets = detailLines.some(isBullet);
@@ -100,63 +83,6 @@ export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }
           }
           return <Text key={i} style={s.detailLine}>{line}</Text>;
         })}
-      </View>
-    );
-  }
-
-  function renderRecipe() {
-    if (!recipe) return null;
-    return (
-      <View style={s.rcCard}>
-        <TouchableOpacity onPress={() => setRecipeExpanded(v => !v)} activeOpacity={0.7} style={s.rcHeader}>
-          <Text style={s.rcEmoji}>{recipe.emoji}</Text>
-          <View style={s.rcInfo}>
-            <Text style={s.rcName}>{recipe.name}</Text>
-            <Text style={s.rcTiming}>{recipe.timing}</Text>
-          </View>
-          {event.recipeType === 'meal' && (
-            <MealCatBadge category={(recipe as Meal).category} theme={theme} />
-          )}
-          <Text style={s.rcArrow}>{recipeExpanded ? '▲' : '▼'}</Text>
-        </TouchableOpacity>
-        <View style={s.rcMacros}>
-          <Text style={[s.rcMacro, { color: theme.meal }]}>🔥 {recipe.calories} kcal</Text>
-          <Text style={[s.rcMacro, { color: theme.primary }]}>💪 {recipe.protein}g</Text>
-          <Text style={[s.rcMacro, { color: theme.water }]}>🌾 {recipe.carbs}g</Text>
-          {event.recipeType === 'shake' && (
-            <Text style={[s.rcMacro, { color: theme.supplement }]}>🧈 {(recipe as ShakeRecipe).fat}g fat</Text>
-          )}
-        </View>
-        {recipeExpanded && (
-          <View style={s.rcBody}>
-            {event.recipeType === 'meal' && !!(recipe as Meal).description && (
-              <Text style={s.rcDesc}>{(recipe as Meal).description}</Text>
-            )}
-            <Text style={s.rcSection}>Ingredients</Text>
-            {recipe.ingredients.map((ing, i) => {
-              const crossed = crossedIngredients.has(i);
-              return (
-                <TouchableOpacity key={i} onPress={() => setCrossedIngredients(prev => toggleSetItem(prev, i))} activeOpacity={0.65} style={s.bulletRow}>
-                  <View style={[s.bulletDot, crossed && { backgroundColor: theme.success, borderColor: theme.success }]}>
-                    {crossed && <Text style={s.bulletCheck}>✓</Text>}
-                  </View>
-                  <Text style={[s.bulletText, crossed && s.bulletCrossed]}>{ing}</Text>
-                </TouchableOpacity>
-              );
-            })}
-            {!!(recipe as ShakeRecipe | Meal).instructions && (
-              <>
-                <Text style={[s.rcSection, { marginTop: 10 }]}>Method</Text>
-                <Text style={s.rcMethod}>{(recipe as ShakeRecipe | Meal).instructions}</Text>
-              </>
-            )}
-            {recipe.tip && (
-              <View style={s.rcTip}>
-                <Text style={s.rcTipText}>💡 {recipe.tip}</Text>
-              </View>
-            )}
-          </View>
-        )}
       </View>
     );
   }
@@ -229,7 +155,9 @@ export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }
             <Text style={s.upcomingDetail} numberOfLines={1}>{coachDetail}</Text>
           )}
 
-          {renderRecipe()}
+          {event.recipeId && event.recipeType && (
+            <RecipeCard recipeId={event.recipeId} recipeType={event.recipeType} />
+          )}
 
           <View style={s.checkboxRow}>
             <TouchableOpacity

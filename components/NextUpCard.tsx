@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ScheduleEvent } from '@/constants/scheduleData';
 import { AppThemeType } from '@/constants/theme';
 import { EVENT_ICONS } from '@/components/ChecklistItem';
+import { RecipeCard } from '@/components/RecipeCard';
 
 interface Props {
   event: ScheduleEvent;
@@ -53,6 +54,12 @@ export function NextUpCard({ event, onMarkDone, onScrollTo, theme }: Props) {
           <Text style={styles.doneBtnText}>Mark done</Text>
         </TouchableOpacity>
       </View>
+
+      {event.recipeId && event.recipeType && (
+        <View style={styles.recipeWrapper}>
+          <RecipeCard recipeId={event.recipeId} recipeType={event.recipeType} />
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -124,5 +131,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#fff',
+  },
+  recipeWrapper: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
   },
 });
