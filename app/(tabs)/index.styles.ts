@@ -88,7 +88,7 @@ export function createIndexStyles(theme: AppThemeType) {
     heroGreeting: { fontSize: 13, fontWeight: '600', color: '#ffffff88', marginBottom: 4 },
     heroName: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 2 },
     heroMotivation: { fontSize: 13, color: '#ffffff77' },
-    heroBadges: { flexDirection: 'row', gap: 6 },
+    heroBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end', maxWidth: 140 },
     heroBadge: { backgroundColor: '#ffffff22', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4 },
     heroBadgeText: { fontSize: 11, fontWeight: '700', color: '#ffffffdd' },
     heroDivider: { height: 1, backgroundColor: '#ffffff25', marginBottom: 14 },

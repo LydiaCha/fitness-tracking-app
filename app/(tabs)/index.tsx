@@ -478,7 +478,7 @@ export default function HomeScreen() {
         >
           <View style={s.heroShine} />
           <View style={s.heroTopRow}>
-            <View>
+            <View style={{ flex: 1, marginRight: 8 }}>
               <Text style={s.heroGreeting}>{getGreeting()},</Text>
               <Text style={s.heroName}>{profileName || 'there'} 👋</Text>
               <Text style={s.heroMotivation}>{getMotivation()}</Text>

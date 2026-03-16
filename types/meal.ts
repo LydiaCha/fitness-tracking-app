@@ -206,6 +206,7 @@ export interface MealRecord {
 
   // ── Content ───────────────────────────────────────────────────────────────
   tip?: string;
+  instructions?: string;
   swaps?: IngredientSwap[];
 }
 

@@ -508,6 +508,7 @@ export const MEAL_DATABASE: MealRecord[] = [
     portionScalable: true,
     groceryCategories: ['protein', 'carbs', 'frozen', 'pantry'],
     tip: 'Batch cook 4 chicken breasts and 3 cups dry rice on Sunday. This meal assembles in 3 minutes.',
+    instructions: 'Cook rice in 2× water, covered, ~15 min until absorbed. Season chicken breast and grill or pan-fry over medium-high heat 5–6 min per side until cooked through — slice across the grain. Microwave frozen peas and corn 2 min. Serve chicken over rice, top with veg, drizzle soy sauce and a few drops of sesame oil.',
     swaps: [
       {
         originalIngredientId: 'chicken-breast',
@@ -1858,6 +1859,7 @@ export const MEAL_DATABASE: MealRecord[] = [
     portionScalable: true,
     groceryCategories: ['protein', 'dairy', 'carbs', 'frozen'],
     tip: 'Blend the oats dry first to make oat flour. Keep the batter thick — thin batter falls apart.',
+    instructions: 'Blend rolled oats in a dry blender until fine — this is your oat flour. Add protein powder, eggs and milk, blend until just combined. Rest batter 2 min to thicken slightly. Heat a non-stick pan over medium heat, spray or lightly butter. Pour small rounds (~¼ cup each). Cook 2–3 min per side until bubbles form and edges are set. Serve with defrosted berries and a drizzle of honey.',
   },
 
   {

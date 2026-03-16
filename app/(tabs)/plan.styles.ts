@@ -277,6 +277,49 @@ export function createPlanStyles(theme: AppThemeType) {
       fontWeight: '600',
       color: theme.textSecondary,
     },
+    mealExpandArrow: {
+      fontSize: 11,
+      color: theme.textMuted,
+      paddingLeft: 4,
+    },
+    mealExpandedSection: {
+      paddingHorizontal: 14,
+      paddingBottom: 14,
+      paddingTop: 2,
+      borderTopWidth: 1,
+      borderTopColor: theme.border + '55',
+    },
+    mealExpandLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      color: theme.textMuted,
+      marginBottom: 6,
+    },
+    mealIngredientText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      lineHeight: 20,
+    },
+    mealInstructionsText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      lineHeight: 19,
+    },
+    mealTipBox: {
+      marginTop: 10,
+      backgroundColor: theme.bgCardAlt,
+      borderRadius: 8,
+      padding: 10,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.primary,
+    },
+    mealTipText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      lineHeight: 18,
+    },
 
     // Grocery preview card (gradient banner on the weekly plan)
     grocerySectionRow: {
@@ -375,24 +418,188 @@ export function createPlanStyles(theme: AppThemeType) {
 
     // ── Grocery segment ────────────────────────────────────────────────────
 
-    summaryBar: {
+    // Header / instruction card — LinearGradient hero (no backgroundColor)
+    groceryHeader: {
+      borderRadius: 20,
+      paddingHorizontal: 18,
+      paddingTop: 18,
+      paddingBottom: 16,
+      marginBottom: 14,
+      overflow: 'hidden',
+    },
+    groceryHeaderShine: {
+      position: 'absolute',
+      top: -30,
+      left: -20,
+      width: 160,
+      height: 100,
+      backgroundColor: '#ffffff18',
+      borderRadius: 60,
+      transform: [{ rotate: '-20deg' }],
+    },
+    groceryHeaderTop: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
       marginBottom: 12,
-      backgroundColor: theme.bgCard,
+    },
+    groceryHeaderTextCol: { flex: 1, marginRight: 10 },
+    groceryHeaderMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    groceryShareBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      borderRadius: 20,
+      backgroundColor: 'rgba(255,255,255,0.25)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.35)',
+    },
+    groceryShareIcon: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#fff',
+      letterSpacing: 0.2,
+    },
+    groceryHeaderTitle: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: '#fff',
+      letterSpacing: -0.3,
+    },
+    groceryHeaderSub: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.65)',
+      marginTop: 3,
+      lineHeight: 17,
+    },
+    groceryHeaderWeek: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#fff',
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 8,
+      overflow: 'hidden',
+    },
+    groceryCoachLines: {
+      gap: 7,
+      marginBottom: 14,
+    },
+    groceryCoachLine: {
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.8)',
+      lineHeight: 18,
+    },
+    groceryCoachCheck: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: '#fff',
+    },
+
+    groceryProgressRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    groceryProgressTrack: {
+      flex: 1,
+      height: 6,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      borderRadius: 3,
+      overflow: 'hidden',
+    },
+    groceryProgressFill: {
+      height: 6,
+      borderRadius: 3,
+    },
+    groceryProgressLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: 'rgba(255,255,255,0.75)',
+      minWidth: 64,
+      textAlign: 'right',
+    },
+
+    // ── Completion card ──────────────────────────────────────────────────────
+    groceryCompleteCard: {
+      borderRadius: 20,
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+      marginTop: 6,
+      marginBottom: 14,
+      alignItems: 'center',
+      overflow: 'hidden',
+    },
+    groceryCompleteEmoji: {
+      fontSize: 44,
+      marginBottom: 12,
+    },
+    groceryCompleteTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: '#fff',
+      textAlign: 'center',
+      letterSpacing: -0.3,
+      marginBottom: 6,
+    },
+    groceryCompleteSub: {
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.72)',
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+
+    // ── Kitchen Check / phase transition ────────────────────────────────────
+    phaseCta: {
+      paddingVertical: 14,
+      borderRadius: 14,
+      alignItems: 'center',
+      marginBottom: 14,
+    },
+    phaseCtaText: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: '#fff',
+    },
+    phaseCtaSecondary: {
+      paddingVertical: 11,
       borderRadius: 12,
+      alignItems: 'center',
       borderWidth: 1,
       borderColor: theme.border,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
+      backgroundColor: theme.bgCard,
     },
-    summaryText: {
+    phaseCtaSecondaryText: {
       fontSize: 13,
-      color: theme.textSecondary,
-      textAlign: 'center',
-    },
-    summaryCount: {
-      color: theme.textPrimary,
       fontWeight: '700',
+      color: theme.textSecondary,
     },
+    atHomeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+      backgroundColor: theme.success + '20',
+    },
+    atHomeBadgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.success,
+    },
+    itemRowAtHome: {
+      opacity: 0.38,
+    },
+
+    // Legacy fields kept for compatibility
+    summaryBar:   { marginBottom: 0 },
+    summaryText:  { fontSize: 13, color: theme.textSecondary },
+    summaryCount: { color: theme.textPrimary, fontWeight: '700' },
+
     actionRow: {
       flexDirection: 'row',
       marginBottom: 14,
@@ -400,27 +607,29 @@ export function createPlanStyles(theme: AppThemeType) {
     },
     actionBtn: {
       flex: 1,
-      paddingVertical: 11,
-      borderRadius: 10,
+      paddingVertical: 12,
+      borderRadius: 12,
       alignItems: 'center',
       backgroundColor: theme.bgCard,
       borderWidth: 1,
       borderColor: theme.border,
     },
     actionBtnPrimary: {
-      backgroundColor: theme.primary + '20',
-      borderColor: theme.primary + '60',
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
     },
     actionBtnText: {
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '700',
       color: theme.textSecondary,
     },
     actionBtnTextPrimary: {
-      color: theme.primary,
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#fff',
     },
     sectionWrapper: {
-      marginBottom: 14,
+      marginBottom: 12,
       borderRadius: 16,
       overflow: 'hidden',
       borderWidth: 1,
@@ -429,7 +638,8 @@ export function createPlanStyles(theme: AppThemeType) {
     sectionHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
       backgroundColor: theme.bgCardAlt,
       gap: 10,
     },
@@ -450,13 +660,27 @@ export function createPlanStyles(theme: AppThemeType) {
       color: theme.textPrimary,
     },
     sectionCount: {
-      fontSize: 13,
+      fontSize: 12,
       color: theme.textMuted,
-      marginRight: 6,
+      fontWeight: '600',
+    },
+    sectionDoneBadge: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: theme.success,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sectionDoneCheck: {
+      fontSize: 10,
+      color: '#fff',
+      fontWeight: '900',
     },
     chevron: {
       fontSize: 14,
       color: theme.textMuted,
+      marginLeft: 4,
     },
     divider: {
       height: 1,
@@ -471,7 +695,7 @@ export function createPlanStyles(theme: AppThemeType) {
       gap: 12,
     },
     itemRowChecked: {
-      opacity: 0.4,
+      opacity: 0.38,
     },
     itemRowSep: {
       height: 1,
@@ -479,9 +703,9 @@ export function createPlanStyles(theme: AppThemeType) {
       marginLeft: 60,
     },
     checkbox: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
       borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',
@@ -490,7 +714,7 @@ export function createPlanStyles(theme: AppThemeType) {
     checkmark: {
       fontSize: 12,
       color: '#fff',
-      fontWeight: '800',
+      fontWeight: '900',
     },
     itemName: {
       flex: 1,
@@ -507,9 +731,11 @@ export function createPlanStyles(theme: AppThemeType) {
       paddingVertical: 4,
       borderRadius: 8,
       backgroundColor: theme.bgCardAlt,
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     qtyText: {
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '700',
       color: theme.textSecondary,
     },

@@ -86,6 +86,50 @@ export function calcWorkoutStreak(workouts: DayLog, gymDays: number[]): number {
 }
 
 /**
+ * Returns weekly consistency scores for the last N weeks (Mon–Sun, newest last).
+ */
+export function getWeeklyScores(
+  workouts: DayLog,
+  water: DayLog,
+  gymDays: number[],
+  numWeeks: number = 8,
+): { label: string; pct: number; isCurrent: boolean }[] {
+  const today    = new Date();
+  const todayKey = toKey(today);
+  const jsDay    = today.getDay();
+  const mondayDiff = jsDay === 0 ? -6 : 1 - jsDay;
+  const MONTHS   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  return Array.from({ length: numWeeks }, (_, idx) => {
+    const w      = numWeeks - 1 - idx; // 0 = current week
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayDiff - w * 7);
+    monday.setHours(0, 0, 0, 0);
+
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d;
+    }).filter(d => toKey(d) <= todayKey);
+
+    let done = 0, total = 0;
+    for (const d of days) {
+      const k   = toKey(d);
+      const gym = isGymDay(d, gymDays);
+      total += gym ? 2 : 1;
+      if (gym && workouts[k]) done++;
+      if (water[k]) done++;
+    }
+
+    return {
+      label:     w === 0 ? 'Now' : `${MONTHS[monday.getMonth()]} ${monday.getDate()}`,
+      pct:       total > 0 ? Math.round((done / total) * 100) : 0,
+      isCurrent: w === 0,
+    };
+  });
+}
+
+/**
  * Returns how many consecutive days a given daily habit has been completed.
  * If today is already done, counting starts from today; otherwise from yesterday.
  */

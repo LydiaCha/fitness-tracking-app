@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Share } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { AppThemeType } from '@/constants/theme';
 import { useMealPlan } from '@/context/MealPlanContext';
 import { GroceryCategory, GroceryItem, GrocerySection, categoryAccent, formatGroceryList } from '@/utils/groceryList';
@@ -10,6 +11,18 @@ import { safeGetItem, safeSetItem, safeParseJSON } from '@/utils/storage';
 interface PersistedChecked {
   weekStart: string;
   ids: string[];
+}
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function weekRangeLabel(): string {
+  const dates = getWeekDatesMonFirst();
+  const start = dates[0];
+  const end   = dates[6];
+  const sMonth = MONTHS[start.getMonth()];
+  const eMonth = MONTHS[end.getMonth()];
+  if (sMonth === eMonth) return `${sMonth} ${start.getDate()}–${end.getDate()}`;
+  return `${sMonth} ${start.getDate()} – ${eMonth} ${end.getDate()}`;
 }
 
 function ItemRow({
@@ -31,7 +44,7 @@ function ItemRow({
         <View style={[
           s.checkbox,
           {
-            borderColor:     isChecked ? accent : accent + '60',
+            borderColor:     isChecked ? accent : accent + '55',
             backgroundColor: isChecked ? accent : 'transparent',
           },
         ]}>
@@ -60,6 +73,7 @@ function SectionCard({
 }) {
   const accent       = categoryAccent(section.category, theme);
   const checkedCount = section.items.filter(i => checkedIds.has(i.id)).length;
+  const allDone      = checkedCount === section.items.length;
 
   return (
     <View style={s.sectionWrapper}>
@@ -71,9 +85,15 @@ function SectionCard({
           <Text style={s.emojiText}>{section.emoji}</Text>
         </View>
         <Text style={s.sectionTitle}>{section.label}</Text>
-        <Text style={s.sectionCount}>
-          {checkedCount > 0 ? `${checkedCount}/` : ''}{section.items.length}
-        </Text>
+        {allDone ? (
+          <View style={s.sectionDoneBadge}>
+            <Text style={s.sectionDoneCheck}>✓</Text>
+          </View>
+        ) : (
+          <Text style={s.sectionCount}>
+            {checkedCount > 0 ? `${checkedCount} / ` : ''}{section.items.length} items
+          </Text>
+        )}
         <Text style={s.chevron}>{isCollapsed ? '›' : '⌄'}</Text>
       </TouchableOpacity>
 
@@ -123,12 +143,13 @@ export function GroceryContent({
     })),
   [planGroceryList]);
 
-  const weekStart = useMemo(() => toKey(getWeekDatesMonFirst()[0]), []);
+  const weekStart  = useMemo(() => toKey(getWeekDatesMonFirst()[0]), []);
+  const weekRange  = useMemo(() => weekRangeLabel(), []);
 
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [collapsed,  setCollapsed]  = useState<Set<GroceryCategory>>(new Set());
 
-  // Load persisted checks on mount; discard if they're from a previous week
+  // Load persisted checks; discard if from a previous week
   useEffect(() => {
     safeGetItem(STORAGE_KEYS.GROCERY_CHECKED).then(raw => {
       const stored = safeParseJSON<PersistedChecked>(raw, { weekStart: '', ids: [] });
@@ -145,10 +166,9 @@ export function GroceryContent({
     );
   }, [weekStart]);
 
-  const totalItems = useMemo(
-    () => sections.reduce((acc, sec) => acc + sec.items.length, 0),
-    [sections],
-  );
+  const totalItems   = useMemo(() => sections.reduce((acc, sec) => acc + sec.items.length, 0), [sections]);
+  const checkedCount = checkedIds.size;
+  const progressPct  = totalItems > 0 ? checkedCount / totalItems : 0;
 
   const toggleItem = useCallback((id: string) => {
     setCheckedIds(prev => {
@@ -183,23 +203,63 @@ export function GroceryContent({
     );
   }
 
+  const allDone = checkedCount === totalItems && totalItems > 0;
+
   return (
     <>
-      <View style={s.summaryBar}>
-        <Text style={s.summaryText}>
-          From your AI meal plan · <Text style={s.summaryCount}>{totalItems} items</Text>
-        </Text>
-      </View>
+      {/* ── Instruction header ── */}
+      <LinearGradient
+        colors={['#10b981', '#0891b2']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.groceryHeader}
+      >
+        {/* Diagonal shine — same as home hero */}
+        <View style={s.groceryHeaderShine} />
+        <View style={s.groceryHeaderTop}>
+          <View style={s.groceryHeaderTextCol}>
+            <Text style={s.groceryHeaderTitle}>
+              {allDone ? '✅ All done — great shop!' : 'Your ingredients for this week\'s meals.'}
+            </Text>
+          </View>
+          <View style={s.groceryHeaderMeta}>
+            <Text style={s.groceryHeaderWeek}>{weekRange}</Text>
+            <TouchableOpacity onPress={handleShare} activeOpacity={0.7} style={s.groceryShareBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={s.groceryShareIcon}>Share</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-      <View style={s.actionRow}>
-        <TouchableOpacity style={s.actionBtn} onPress={() => { const e = new Set<string>(); setCheckedIds(e); saveChecked(e); }} activeOpacity={0.7}>
-          <Text style={s.actionBtnText}>Uncheck All</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.actionBtn, s.actionBtnPrimary]} onPress={handleShare} activeOpacity={0.7}>
-          <Text style={s.actionBtnTextPrimary}>Share</Text>
-        </TouchableOpacity>
-      </View>
+        {!allDone && (
+          <View style={s.groceryCoachLines}>
+            <Text style={s.groceryCoachLine}>
+              <Text style={s.groceryCoachCheck}>✓</Text>
+              {'  Check off what you already have at home'}
+            </Text>
+            <Text style={s.groceryCoachLine}>
+              {'🛒  Buy the remaining items when you go shopping'}
+            </Text>
+          </View>
+        )}
 
+        <View style={s.groceryProgressRow}>
+          <View style={s.groceryProgressTrack}>
+            <View style={[
+              s.groceryProgressFill,
+              {
+                width: `${Math.round(progressPct * 100)}%` as any,
+                backgroundColor: allDone ? '#4ade80' : '#fff',
+              },
+            ]} />
+          </View>
+          <Text style={s.groceryProgressLabel}>
+            {checkedCount} / {totalItems} items
+          </Text>
+        </View>
+      </LinearGradient>
+
+
+      {/* ── Sections ── */}
       {sections.map(section => (
         <SectionCard
           key={section.category}
@@ -212,6 +272,23 @@ export function GroceryContent({
           s={s}
         />
       ))}
+
+      {/* ── Completion card ── */}
+      {allDone && (
+        <LinearGradient
+          colors={['#10b981', '#0891b2']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.groceryCompleteCard}
+        >
+          <View style={s.groceryHeaderShine} />
+          <Text style={s.groceryCompleteEmoji}>💪</Text>
+          <Text style={s.groceryCompleteTitle}>You're set for this week's meals.</Text>
+          <Text style={s.groceryCompleteSub}>
+            All {totalItems} ingredients accounted for.{'\n'}You're ready for the week.
+          </Text>
+        </LinearGradient>
+      )}
     </>
   );
 }
