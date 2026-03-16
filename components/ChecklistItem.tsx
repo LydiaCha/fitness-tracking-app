@@ -144,10 +144,10 @@ export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }
                 </TouchableOpacity>
               );
             })}
-            {event.recipeType === 'shake' && (
+            {!!(recipe as ShakeRecipe | Meal).instructions && (
               <>
                 <Text style={[s.rcSection, { marginTop: 10 }]}>Method</Text>
-                <Text style={s.rcMethod}>{(recipe as ShakeRecipe).instructions}</Text>
+                <Text style={s.rcMethod}>{(recipe as ShakeRecipe | Meal).instructions}</Text>
               </>
             )}
             {recipe.tip && (

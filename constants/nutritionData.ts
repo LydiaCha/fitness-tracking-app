@@ -25,6 +25,7 @@ export interface Meal {
   category: 'pre-workout' | 'post-workout' | 'main' | 'snack' | 'night-shift';
   description: string;
   ingredients: string[];
+  instructions: string;
   tip?: string;
 }
 
@@ -173,6 +174,7 @@ export const MEAL_IDEAS: Meal[] = [
       '½ cup frozen corn',
       'Soy sauce + sesame oil drizzle',
     ],
+    instructions: 'Cook rice in 2× water, covered, ~15 min or until absorbed. Season chicken and grill or pan-fry over medium-high heat 5–6 min per side until cooked through — slice across the grain. Microwave peas and corn 2 min. Serve chicken over rice, top with veg, drizzle soy sauce and a few drops of sesame oil.',
     tip: 'Batch cook chicken and rice on Sundays. Add frozen peas and corn straight from frozen — they defrost in seconds with hot rice.',
   },
   {
@@ -193,6 +195,7 @@ export const MEAL_IDEAS: Meal[] = [
       '1 carrot (grated or diced)',
       'Lemon juice + olive oil + garlic',
     ],
+    instructions: 'Rinse quinoa then cook in 2× water for 12 min until absorbed and tails appear. Season chicken and grill or pan-fry 5–6 min per side until cooked through, then slice. Grate or finely dice carrot. Microwave peas 2 min. Assemble in a bowl and dress with lemon juice, olive oil, a crushed garlic clove, salt and pepper.',
     tip: 'Cook a big batch of quinoa at the start of the week. It keeps in the fridge for 5 days.',
   },
   {
@@ -213,6 +216,7 @@ export const MEAL_IDEAS: Meal[] = [
       '1 tomato (sliced)',
       'Salt, pepper, chilli flakes',
     ],
+    instructions: 'Toast bread until golden. To poach: bring a pan of water to a gentle simmer with a splash of vinegar, swirl, slide in cracked eggs, cook 3 min. To fry: heat butter over medium heat, fry to your liking. Mash avocado with lemon juice, salt and pepper. Spread on toast, top with egg, sliced tomato and chilli flakes.',
   },
   {
     id: 'turkey-stir',
@@ -233,6 +237,7 @@ export const MEAL_IDEAS: Meal[] = [
       '2 tbsp soy sauce',
       'Garlic + dash of sesame oil',
     ],
+    instructions: 'Heat a wok or large pan over high heat with a splash of oil. Add beef mince and cook 5–6 min, breaking it up until browned. Push to one side, crack in egg and scramble. Add cooked rice and peas + corn mix. Toss together with soy sauce, minced garlic and a dash of sesame oil. Stir-fry on high heat 2 min until everything is hot.',
     tip: 'Cook extra rice and freeze in portions — this comes together in 10 minutes with pre-cooked rice.',
   },
   {
@@ -254,6 +259,7 @@ export const MEAL_IDEAS: Meal[] = [
       '2 tbsp sour cream',
       'Grated cheddar + jalapeños (optional)',
     ],
+    instructions: 'Brown beef mince in a pan over medium-high heat 5–6 min, breaking it up. Season with cumin, garlic powder, paprika, salt and pepper. Add tinned tomatoes and frozen corn, simmer 3–4 min until thickened. Serve over cooked rice. Top with sour cream, grated cheddar and jalapeños.',
     tip: 'Season the beef with cumin, garlic powder and paprika for an easy taco flavour without any kits.',
   },
   {
@@ -274,6 +280,7 @@ export const MEAL_IDEAS: Meal[] = [
       '1 tbsp chia seeds',
       'Frozen berries + drizzle honey',
     ],
+    instructions: 'Add oats, protein powder, chia seeds and milk to a jar. Stir well until the protein powder is fully mixed in — no lumps. Cover and refrigerate overnight or minimum 4 hours. Before eating, top with defrosted berries and a drizzle of honey. Eat cold straight from the jar.',
     tip: 'Mix all ingredients in a jar before your shift starts. It\'ll be perfectly soaked by the time you eat at 4 AM.',
   },
   {
@@ -295,6 +302,7 @@ export const MEAL_IDEAS: Meal[] = [
       'Handful spinach leaves',
       'Squeeze of lemon',
     ],
+    instructions: 'Drain tuna thoroughly and place in a bowl. Mix with cream cheese, lemon juice, salt and pepper. Lay wrap flat. Spread tuna mixture across the centre third. Add cucumber slices and spinach leaves. Fold in the sides, then roll tightly from the bottom. Slice in half on the diagonal. No cooking needed.',
     tip: 'Drain tuna well before mixing with cream cheese. Wraps take 2 minutes to assemble during your shift.',
   },
   {
@@ -315,6 +323,7 @@ export const MEAL_IDEAS: Meal[] = [
       '2 tbsp hummus',
       'Squeeze of lemon',
     ],
+    instructions: 'Drain tuna and season with lemon juice, salt and pepper. Slice cucumber. Arrange crackers on a plate. Place tuna on top of crackers or in a small bowl for dipping. Serve hummus alongside the cucumber for dipping. No cooking required — just open and assemble.',
     tip: 'Keep a few tins of tuna and a box of crackers at your desk so this is always an option.',
   },
   {
@@ -334,6 +343,7 @@ export const MEAL_IDEAS: Meal[] = [
       '½ cup peas (steamed or microwaved from frozen)',
       'Peppercorn sauce or butter + garlic',
     ],
+    instructions: 'Preheat oven to 200°C. Halve baby potatoes, toss in olive oil, salt and pepper — roast 25–30 min until golden. Bring steak to room temp 15 min before cooking. Heat a heavy pan until very hot. Pat steak completely dry, season generously. Sear 2–3 min per side for medium. Add a knob of butter and a crushed garlic clove, baste 30 sec. Rest 3 min before slicing. Microwave peas 2 min.',
     tip: 'Pat the steak dry before cooking for a better sear. Let it rest 2–3 minutes after cooking.',
   },
   {
@@ -354,6 +364,7 @@ export const MEAL_IDEAS: Meal[] = [
       'Garlic + Italian herbs (dried)',
       'Parmesan to serve',
     ],
+    instructions: 'Boil pasta in well-salted water to packet instructions (~10–12 min). Meanwhile, brown mince in a pan over medium-high heat, drain excess fat. Add minced garlic, cook 1 min. Pour in tinned tomatoes, add a big pinch of dried Italian herbs, salt and pepper. Simmer 8–10 min until thickened. Drain pasta, combine with sauce. Finish with a generous grating of parmesan.',
     tip: 'Make double and refrigerate — reheats perfectly for a night shift meal the next day.',
   },
   {
@@ -375,6 +386,7 @@ export const MEAL_IDEAS: Meal[] = [
       '1 tomato (sliced)',
       'Butter + salt + pepper',
     ],
+    instructions: 'Toast bread. Whisk eggs with milk, salt and pepper. Melt butter in a non-stick pan over low–medium heat. Pour in eggs and fold gently with a spatula — keep them moving but don\'t over-stir. When almost set but still glossy, fold in grated cheddar. Remove from heat immediately — residual heat finishes cooking. Serve on toast with sliced tomato.',
     tip: 'Low and slow on the heat makes the creamiest scrambled eggs. Pull off heat just before fully set — residual heat finishes them.',
   },
   {
@@ -395,6 +407,7 @@ export const MEAL_IDEAS: Meal[] = [
       'Drizzle of honey',
       'Pinch of cinnamon',
     ],
+    instructions: 'No cooking needed. Spoon cottage cheese into a bowl. Slice fresh strawberries or drain tinned peach slices and arrange on top. Sprinkle over chia seeds and cinnamon. Drizzle honey over the top. Ready in under 2 minutes.',
   },
   {
     id: 'greek-yogurt',
@@ -414,6 +427,7 @@ export const MEAL_IDEAS: Meal[] = [
       '1 tsp honey',
       '1 tbsp chia seeds',
     ],
+    instructions: 'No cooking needed. Defrost berries by leaving at room temp 5 min or microwaving 30 sec. Spoon yogurt into a bowl or glass. Add granola, then the berries. Drizzle honey and sprinkle chia seeds. Layer it for extra texture — yogurt, granola, berries, repeat. Ready in 2 minutes.',
   },
 ];
 
