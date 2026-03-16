@@ -7,15 +7,20 @@ import { EVENT_ICONS } from '@/components/ChecklistItem';
 interface Props {
   event: ScheduleEvent;
   onMarkDone: () => void;
+  onScrollTo?: () => void;
   theme: AppThemeType;
 }
 
-export function NextUpCard({ event, onMarkDone, theme }: Props) {
+export function NextUpCard({ event, onMarkDone, onScrollTo, theme }: Props) {
   const icon  = EVENT_ICONS[event.type] ?? '•';
   const color = (theme as Record<string, string>)[event.type] ?? theme.primary;
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.bgCard, borderColor: color + '44' }]}>
+    <TouchableOpacity
+      activeOpacity={0.92}
+      onPress={onScrollTo}
+      style={[styles.card, { backgroundColor: theme.bgCard, borderColor: color + '66' }]}
+    >
       {/* Header row */}
       <View style={[styles.headerRow, { borderBottomColor: theme.border }]}>
         <View style={[styles.badge, { backgroundColor: color + '22' }]}>
@@ -48,7 +53,7 @@ export function NextUpCard({ event, onMarkDone, theme }: Props) {
           <Text style={styles.doneBtnText}>Mark done</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -113,7 +118,7 @@ const styles = StyleSheet.create({
   doneBtn: {
     borderRadius: 10,
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 11,
   },
   doneBtnText: {
     fontSize: 13,

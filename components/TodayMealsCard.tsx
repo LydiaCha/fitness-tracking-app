@@ -83,13 +83,17 @@ export function TodayMealsCard({
               <Text style={s.todayMealName} numberOfLines={1}>{meal.name}</Text>
 
               {/* Kcal + chevron */}
-              <Text style={s.todayMealKcal}>{kcal} kcal</Text>
+              <Text style={[s.todayMealKcal, { color: theme.meal }]}>{kcal} kcal</Text>
               <Text style={[s.todayMealChevron, expanded && s.todayMealChevronOpen]}>›</Text>
             </TouchableOpacity>
 
             {/* Expanded macros */}
             {expanded && (
               <View style={s.todayMealMacros}>
+                <View style={s.todayMacroPill}>
+                  <Text style={[s.todayMacroValue, { color: theme.meal }]}>{kcal}</Text>
+                  <Text style={s.todayMacroLabel}>kcal</Text>
+                </View>
                 <View style={s.todayMacroPill}>
                   <Text style={[s.todayMacroValue, { color: theme.primary }]}>{protein}g</Text>
                   <Text style={s.todayMacroLabel}>protein</Text>

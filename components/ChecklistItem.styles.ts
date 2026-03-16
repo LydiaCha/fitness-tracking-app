@@ -10,7 +10,6 @@ export function createChecklistItemStyles(theme: AppThemeType) {
     spine:        { alignItems: 'center', width: 18, paddingTop: 6 },
     dot:          { width: 10, height: 10, borderRadius: 5, zIndex: 1 },
     dotDone:      { width: 8, height: 8, borderRadius: 4 },
-    dotNextUp:    { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#fff' },
     line:         { flex: 1, width: 2, marginTop: 3, borderRadius: 1 },
 
     // ── DONE (compact) ────────────────────────────────────────────────────
@@ -21,22 +20,10 @@ export function createChecklistItemStyles(theme: AppThemeType) {
     doneIcon:     { fontSize: 13 },
     doneLabel:    { fontSize: 13, color: theme.textMuted, textDecorationLine: 'line-through', flex: 1 },
 
-    // ── NEXT UP (hero card) ────────────────────────────────────────────────
-    nextUpWrapper:   { flex: 1, marginBottom: 8 },
-    nextUpBanner:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-    nextUpBadge:     { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-    nextUpBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, color: '#fff' },
-    nextUpCard:      { borderRadius: 16, padding: 16, borderWidth: 1.5 },
-    nextUpTime:      { fontSize: 22, fontWeight: '800', color: theme.textPrimary, marginBottom: 6 },
-    nextUpLabelRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-    nextUpIcon:      { fontSize: 22 },
-    nextUpLabel:     { fontSize: 18, fontWeight: '700', color: theme.textPrimary, flex: 1 },
-    nextUpDur:       { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
-    nextUpDurText:   { fontSize: 11, fontWeight: '700' },
-    nextUpDetail:    { fontSize: 13, color: theme.textSecondary, lineHeight: 20, marginTop: 4 },
-    nextUpCheckRow:  { marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' },
-    nextUpCheckBtn:  { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1 },
-    nextUpCheckText: { fontSize: 13, fontWeight: '700' },
+    // ── SKIPPED (compact) ─────────────────────────────────────────────────
+    skippedRow:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 8, marginBottom: 2, borderRadius: 8, backgroundColor: '#f59e0b14' },
+    skippedDash:  { fontSize: 12, color: '#f59e0b', fontWeight: '700' },
+    skippedLabel: { fontSize: 13, color: theme.textMuted, textDecorationLine: 'line-through', opacity: 0.6, flex: 1 },
 
     // ── UPCOMING (standard card) ───────────────────────────────────────────
     upcomingWrapper: { flex: 1, marginBottom: 6 },
@@ -51,6 +38,8 @@ export function createChecklistItemStyles(theme: AppThemeType) {
     checkboxRow:     { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
     checkbox:        { width: 20, height: 20, borderRadius: 6, borderWidth: 2, borderColor: theme.border, justifyContent: 'center', alignItems: 'center' },
     checkmark:       { fontSize: 11, color: '#fff', fontWeight: '700' },
+    skipBtn:         { marginLeft: 'auto' as any, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: theme.border },
+    skipBtnText:     { fontSize: 12, color: theme.textMuted, fontWeight: '600' },
 
     // ── Bullet detail (shared) ─────────────────────────────────────────────
     detailBlock:  { marginTop: 6, gap: 2 },

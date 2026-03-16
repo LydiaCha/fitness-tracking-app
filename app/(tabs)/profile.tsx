@@ -31,8 +31,9 @@ const AI_ENABLED_KEY  = STORAGE_KEYS.AI_ENABLED;
 const AVATAR_KEY      = STORAGE_KEYS.AVATAR;
 
 const AVATAR_EMOJIS = [
-  '💪','🏋️','🧘','🏃','🤸','⚡','🌙','🦋',
-  '🌸','✨','🔥','🎯','🥗','💚','🌿','👑',
+  '💪','🥊','🏆','🏅','⚡','🔥','🎯',
+  '🥗','🥤','🍎','💧','👟','🧠',
+  '🦋','💚',
 ];
 const MEAL_LOGS_KEY  = STORAGE_KEYS.MEAL_LOGS;
 const AI_MEALS_KEY   = STORAGE_KEYS.AI_MEALS;
@@ -141,7 +142,9 @@ export default function ProfileScreen() {
   const [weightKg,  setWeightKg]  = useState<number | null>(null);
   const [aiEnabled,    setAiEnabled]    = useState(true);
   const [avatarEmoji,  setAvatarEmoji]  = useState('💪');
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [nameDraft,      setNameDraft]      = useState('');
+  const [emojiDraft,     setEmojiDraft]     = useState('💪');
   const [achievementData, setAchievementData] = useState<AchievementData | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
@@ -183,12 +186,17 @@ export default function ProfileScreen() {
     });
   }, []));
 
-  const pickEmoji = useCallback(async (emoji: string) => {
-    setAvatarEmoji(emoji);
-    setEmojiPickerOpen(false);
-    const ok = await safeSetItem(AVATAR_KEY, emoji);
-    if (!ok) logger.warn('storage', 'pickEmoji', 'Failed to persist avatar emoji');
-  }, []);
+  const saveProfileCard = useCallback(async () => {
+    const trimmed = nameDraft.trim();
+    const newName = trimmed || profile.name;
+    const updated = { ...profile, name: newName };
+    setProfile(updated);
+    setDraft(updated);
+    setAvatarEmoji(emojiDraft);
+    setProfileEditing(false);
+    await saveUserProfile(updated);
+    await safeSetItem(AVATAR_KEY, emojiDraft);
+  }, [nameDraft, emojiDraft, profile]);
 
   const openSection = useCallback((section: Section) => {
     setDraft({ ...profile, weekSchedule: profile.weekSchedule.map(d => ({ ...d })) });
@@ -288,41 +296,81 @@ export default function ProfileScreen() {
 
         {/* ── Avatar ── */}
         <View style={s.avatarRow}>
-          <TouchableOpacity onPress={() => setEmojiPickerOpen(p => !p)} activeOpacity={0.8}>
-            <View style={s.avatar}>
-              <Text style={s.avatarEmoji}>{avatarEmoji}</Text>
-            </View>
-            <Text style={{ fontSize: 11, color: theme.primary, textAlign: 'center', marginTop: -6, marginBottom: 8 }}>
-              {emojiPickerOpen ? 'Close' : 'Change'}
-            </Text>
-          </TouchableOpacity>
+          {profileEditing ? (
+            <>
+              {/* Live emoji preview */}
+              <View style={s.avatar}>
+                <Text style={s.avatarEmoji}>{emojiDraft}</Text>
+              </View>
 
-          {emojiPickerOpen && (
-            <View style={{
-              flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center',
-              backgroundColor: theme.bgCard, borderRadius: 16, padding: 14,
-              marginBottom: 12, borderWidth: 1, borderColor: theme.border,
-            }}>
-              {AVATAR_EMOJIS.map(emoji => (
+              {/* Name input */}
+              <TextInput
+                style={[s.metricInput, { textAlign: 'center', fontSize: 20, fontWeight: '700', marginBottom: 16, minWidth: 200 }]}
+                value={nameDraft}
+                onChangeText={setNameDraft}
+                placeholder="Your name"
+                placeholderTextColor={theme.textMuted}
+                autoFocus
+                returnKeyType="done"
+              />
+
+              {/* Emoji picker */}
+              <View style={{
+                flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center',
+                backgroundColor: theme.bgCardAlt, borderRadius: 16, padding: 14,
+                marginBottom: 16, borderWidth: 1, borderColor: theme.border,
+              }}>
+                {AVATAR_EMOJIS.map(emoji => (
+                  <TouchableOpacity
+                    key={emoji}
+                    onPress={() => setEmojiDraft(emoji)}
+                    style={{
+                      width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: emoji === emojiDraft ? theme.primary + '33' : theme.bgCard,
+                      borderWidth: emoji === emojiDraft ? 2 : 1,
+                      borderColor: emoji === emojiDraft ? theme.primary : theme.border,
+                    }}
+                    activeOpacity={0.7}>
+                    <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Save / Cancel */}
+              <View style={{ flexDirection: 'row', gap: 12 }}>
                 <TouchableOpacity
-                  key={emoji}
-                  onPress={() => pickEmoji(emoji)}
-                  style={{
-                    width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: emoji === avatarEmoji ? theme.primary + '33' : theme.bgCardAlt,
-                    borderWidth: emoji === avatarEmoji ? 2 : 1,
-                    borderColor: emoji === avatarEmoji ? theme.primary : theme.border,
-                  }}
+                  onPress={() => setProfileEditing(false)}
+                  style={{ flex: 1, paddingVertical: 11, borderRadius: 12, borderWidth: 1, borderColor: theme.border, alignItems: 'center' }}
                   activeOpacity={0.7}>
-                  <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textMuted }}>Cancel</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
+                <TouchableOpacity
+                  onPress={saveProfileCard}
+                  style={{ flex: 2, paddingVertical: 11, borderRadius: 12, backgroundColor: theme.primary, alignItems: 'center' }}
+                  activeOpacity={0.8}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={s.avatar}>
+                <Text style={s.avatarEmoji}>{avatarEmoji}</Text>
+              </View>
+              <Text style={s.name}>{profile.name || 'Add your name'}</Text>
+              <Text style={s.tagline}>{GOAL_LABELS[profile.fitnessGoal]}</Text>
+              <TouchableOpacity
+                onPress={() => { setNameDraft(profile.name); setEmojiDraft(avatarEmoji); setProfileEditing(true); }}
+                activeOpacity={0.7}
+                style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 12, color: theme.primary, fontWeight: '600' }}>✎ Edit profile</Text>
+              </TouchableOpacity>
+            </>
           )}
-
-          <Text style={s.name}>Lydia</Text>
-          <Text style={s.tagline}>Night shift tech · {GOAL_LABELS[profile.fitnessGoal]}</Text>
         </View>
+
+        {/* ── Rest of screen (dimmed while editing profile card) ── */}
+        <View style={{ opacity: profileEditing ? 0.1 : 1 }} pointerEvents={profileEditing ? 'none' : 'auto'}>
 
         {/* ── Quick stats ── */}
         <View style={s.statsRow}>
@@ -642,6 +690,7 @@ export default function ProfileScreen() {
         </View>
 
         <Text style={s.versionText}>PeakRoutine v1.0.0</Text>
+        </View>{/* end dimmed wrapper */}
       </ScrollView>
     </SafeAreaView>
   );

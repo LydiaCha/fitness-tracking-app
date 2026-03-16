@@ -45,12 +45,13 @@ function MealCatBadge({ category, theme }: { category: string; theme: AppThemeTy
 interface ChecklistItemProps {
   event: ScheduleEvent;
   done: boolean;
+  skipped: boolean;
   isLast: boolean;
-  isNextUp?: boolean;
   onToggle: () => void;
+  onSkip: () => void;
 }
 
-export function ChecklistItem({ event, done, isLast, isNextUp, onToggle }: ChecklistItemProps) {
+export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }: ChecklistItemProps) {
   const { theme } = useAppTheme();
   const s = useMemo(() => createChecklistItemStyles(theme), [theme]);
   const [recipeExpanded, setRecipeExpanded] = useState(false);
@@ -180,54 +181,22 @@ export function ChecklistItem({ event, done, isLast, isNextUp, onToggle }: Check
     );
   }
 
-  // ── NEXT UP: hero card ────────────────────────────────────────────────────
-  if (isNextUp) {
+  // ── SKIPPED: compact single row ───────────────────────────────────────────
+  if (skipped) {
     return (
       <View style={s.row}>
         <View style={s.spine}>
-          <View style={[s.dotNextUp, { backgroundColor: color }]} />
-          {!isLast && <View style={[s.line, { backgroundColor: color + '50' }]} />}
+          <View style={[s.dotDone, { backgroundColor: theme.textMuted }]} />
+          {!isLast && <View style={[s.line, { backgroundColor: theme.border }]} />}
         </View>
-        <View style={s.nextUpWrapper}>
-          {/* NEXT UP banner */}
-          <View style={s.nextUpBanner}>
-            <View style={[s.nextUpBadge, { backgroundColor: color }]}>
-              <Text style={s.nextUpBadgeText}>⚡ NEXT UP</Text>
-            </View>
+        <TouchableOpacity style={s.skippedRow} onPress={onSkip} activeOpacity={0.6}>
+          <Text style={s.skippedDash}>⊘</Text>
+          <Text style={s.doneTime}>{event.time}</Text>
+          <View style={s.doneLine}>
+            <Text style={s.doneIcon}>{icon}</Text>
+            <Text style={s.skippedLabel} numberOfLines={1}>{event.label}</Text>
           </View>
-
-          {/* Hero card */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={onToggle}
-            style={[s.nextUpCard, { backgroundColor: color + '12', borderColor: color }]}>
-            <Text style={[s.nextUpTime, { color }]}>{event.time}</Text>
-            <View style={s.nextUpLabelRow}>
-              <Text style={s.nextUpIcon}>{icon}</Text>
-              <Text style={s.nextUpLabel}>{event.label}</Text>
-              {event.duration && (
-                <View style={[s.nextUpDur, { backgroundColor: color + '20', borderColor: color + '50' }]}>
-                  <Text style={[s.nextUpDurText, { color }]}>{event.duration}</Text>
-                </View>
-              )}
-            </View>
-
-            {coachDetail && (
-              <Text style={s.nextUpDetail} numberOfLines={hasBullets ? 2 : undefined}>
-                {hasBullets ? coachDetail : event.detail}
-              </Text>
-            )}
-
-            {hasBullets && renderDetailContent(false)}
-            {renderRecipe()}
-
-            <View style={s.nextUpCheckRow}>
-              <View style={[s.nextUpCheckBtn, { borderColor: color + '60', backgroundColor: color + '15' }]}>
-                <Text style={[s.nextUpCheckText, { color }]}>Mark done</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -269,6 +238,9 @@ export function ChecklistItem({ event, done, isLast, isNextUp, onToggle }: Check
               style={s.checkbox}>
             </TouchableOpacity>
             <Text style={{ fontSize: 12, color: theme.textMuted }}>Tap to mark done</Text>
+            <TouchableOpacity onPress={onSkip} activeOpacity={0.7} style={s.skipBtn}>
+              <Text style={s.skipBtnText}>Skip</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
