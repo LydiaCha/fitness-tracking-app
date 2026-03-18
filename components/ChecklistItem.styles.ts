@@ -21,8 +21,8 @@ export function createChecklistItemStyles(theme: AppThemeType) {
     doneLabel:    { fontSize: 13, color: theme.textMuted, textDecorationLine: 'line-through', flex: 1 },
 
     // ── SKIPPED (compact) ─────────────────────────────────────────────────
-    skippedRow:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 8, marginBottom: 2, borderRadius: 8, backgroundColor: '#f59e0b14' },
-    skippedDash:  { fontSize: 12, color: '#f59e0b', fontWeight: '700' },
+    skippedRow:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 8, marginBottom: 2, borderRadius: 8, backgroundColor: theme.supplement + '14' },
+    skippedDash:  { fontSize: 12, color: theme.supplement, fontWeight: '700' },
     skippedLabel: { fontSize: 13, color: theme.textMuted, textDecorationLine: 'line-through', opacity: 0.6, flex: 1 },
 
     // ── UPCOMING (standard card) ───────────────────────────────────────────
@@ -51,21 +51,27 @@ export function createChecklistItemStyles(theme: AppThemeType) {
     bulletCrossed:{ textDecorationLine: 'line-through', color: theme.textMuted, opacity: 0.55 },
 
     // ── Recipe card (shared) ───────────────────────────────────────────────
-    rcCard:       { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.border },
-    rcHeader:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-    rcEmoji:      { fontSize: 22 },
-    rcInfo:       { flex: 1 },
-    rcName:       { fontSize: 13, fontWeight: '700', color: theme.textPrimary, marginBottom: 1 },
-    rcTiming:     { fontSize: 11, color: theme.textSecondary },
-    rcArrow:      { fontSize: 11, color: theme.textMuted },
-    rcMacros:     { flexDirection: 'row', gap: 10, flexWrap: 'wrap', borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 8, marginBottom: 2 },
-    rcMacro:      { fontSize: 12, fontWeight: '600' },
-    rcBody:       { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.border },
-    rcDesc:       { fontSize: 12, color: theme.textSecondary, lineHeight: 18, marginBottom: 10 },
-    rcSection:    { fontSize: 11, fontWeight: '700', color: theme.textSecondary, letterSpacing: 0.5, marginBottom: 6 },
-    rcMethod:     { fontSize: 12, color: theme.textSecondary, lineHeight: 18 },
-    rcTip:        { backgroundColor: theme.primary + '18', borderRadius: 8, padding: 10, marginTop: 10, borderWidth: 1, borderColor: theme.primary + '40' },
-    rcTipText:    { fontSize: 12, color: theme.primaryLight, lineHeight: 17 },
+    rcCard:           { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.border },
+    rcHeader:         { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+    rcEmoji:          { fontSize: 22 },
+    rcInfo:           { flex: 1 },
+    rcName:           { fontSize: 13, fontWeight: '700', color: theme.textPrimary, marginBottom: 1 },
+    rcTiming:         { fontSize: 11, color: theme.textSecondary },
+    rcArrow:          { fontSize: 11, color: theme.textMuted },
+    rcMacros:         { flexDirection: 'row', gap: 10, flexWrap: 'wrap', borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 8, marginBottom: 2 },
+    rcMacro:          { fontSize: 12, fontWeight: '600' },
+    rcBody:           { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.border, flexShrink: 1 },
+    rcSection:        { fontSize: 11, fontWeight: '700', color: theme.textSecondary, letterSpacing: 0.5, marginBottom: 6 },
+    rcMethod:         { fontSize: 12, color: theme.textSecondary, lineHeight: 18, flexShrink: 1 },
+    rcTip:     { backgroundColor: theme.primary + '18', borderRadius: 8, padding: 10, marginTop: 10, borderWidth: 1, borderColor: theme.primary + '40' },
+    rcTipText: { fontSize: 12, color: theme.primaryLight, lineHeight: 17 },
+    // ── Swap pills ─────────────────────────────────────────────────────────
+    swapLabel:        { fontSize: 10, fontWeight: '700', color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+    swapRow:          { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    swapPill:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bgCardAlt },
+    swapPillActive:   { borderColor: theme.primary, backgroundColor: theme.primary + '20' },
+    swapPillText:     { fontSize: 12, fontWeight: '600', color: theme.textSecondary },
+    swapPillTextActive: { color: theme.primary },
   });
 }
 

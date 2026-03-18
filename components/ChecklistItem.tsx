@@ -1,34 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { AppTheme } from '@/constants/theme';
 import { createChecklistItemStyles } from './ChecklistItem.styles';
 import { useAppTheme } from '@/context/ThemeContext';
 import { ScheduleEvent } from '@/constants/scheduleData';
 import { RecipeCard } from './RecipeCard';
+import { SHAKE_RECIPES, MEAL_IDEAS } from '@/constants/nutritionData';
+import { EVENT_ICONS, MEAL_CAT_COLORS, isBullet, toggleSetItem } from './checklistUtils';
+import { BulletRow } from './BulletRow';
+import { WorkoutCard } from './WorkoutCard';
 
-// ─── Module-level helpers ────────────────────────────────────────────────────
-export const EVENT_ICONS: Record<string, string> = {
-  wake: '🌅', sleep: '😴', work: '💻', class: '📚', gym: '🏋️',
-  meal: '🍽️', snack: '🍎', shake: '🥤', supplement: '💊', water: '💧',
-  rest: '☁️', yoga: '🧘', prep: '📋', free: '🌟',
-};
-
-// Accent colours — identical in both themes, safe to use at module level
-export const MEAL_CAT_COLORS: Record<string, string> = {
-  'pre-workout':  AppTheme.secondary,
-  'post-workout': AppTheme.gym,
-  'main':         AppTheme.meal,
-  'snack':        AppTheme.supplement,
-  'night-shift':  AppTheme.work,
-};
-
-export function isBullet(line: string) { return line.trimStart().startsWith('•'); }
-
-export function toggleSetItem(prev: Set<number>, i: number): Set<number> {
-  const next = new Set(prev);
-  next.has(i) ? next.delete(i) : next.add(i);
-  return next;
-}
+export { EVENT_ICONS, MEAL_CAT_COLORS, isBullet, toggleSetItem };
 
 // ─── Component ───────────────────────────────────────────────────────────────
 interface ChecklistItemProps {
@@ -43,16 +24,43 @@ interface ChecklistItemProps {
 export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }: ChecklistItemProps) {
   const { theme } = useAppTheme();
   const s = useMemo(() => createChecklistItemStyles(theme), [theme]);
+
+  // Compute bullet metadata before state so we can use it in the initializer.
+  // Checklists only activate when there are MORE than 2 bullet items —
+  // 1–2 items are shown as plain coaching text instead.
+  // Gym events use WorkoutCard instead of inline bullet rendering.
+  const isGymEvent   = event.type === 'gym';
+  const detailLines  = event.detail?.split('\n') ?? [];
+  const bulletCount  = detailLines.filter(isBullet).length;
+  const hasBullets   = !isGymEvent && bulletCount > 2;
+
+  // For plain-text detail: measured line count drives the expand threshold.
+  // null = not yet measured (render unclamped so onTextLayout gets the true count).
+  const [textLineCount, setTextLineCount] = useState<number | null>(null);
+  const isTextLong = textLineCount !== null && textLineCount > 3;
+  const isExpandable = hasBullets || isTextLong;
+
   const [crossedLines, setCrossedLines] = useState<Set<number>>(new Set());
+  // Bullet checklists start expanded so they're immediately actionable
+  const [detailExpanded, setDetailExpanded] = useState(hasBullets);
+  // null = no user override; use event's own recipeId
+  const [recipeOverride, setRecipeOverride] = useState<string | null>(null);
+  const selectedRecipeId = recipeOverride ?? event.recipeId;
+
+  // Build the full list of recipe options (primary + alternatives) for swap pills
+  const recipeOptions = useMemo(() => {
+    if (!event.recipeId || !event.recipeType || !event.alternatives?.length) return [];
+    const ids = [event.recipeId, ...event.alternatives];
+    return ids.flatMap(id => {
+      const recipe = event.recipeType === 'shake'
+        ? SHAKE_RECIPES.find(r => r.id === id)
+        : MEAL_IDEAS.find(r => r.id === id);
+      return recipe ? [{ id, emoji: recipe.emoji, name: recipe.name }] : [];
+    });
+  }, [event.recipeId, event.recipeType, event.alternatives]);
 
   const color = (theme as Record<string, string>)[event.type] ?? theme.primary;
-  const icon = EVENT_ICONS[event.type] ?? '•';
-
-  const detailLines = event.detail?.split('\n') ?? [];
-  const hasBullets = detailLines.some(isBullet);
-
-  // ── Brief coaching detail (first non-bullet line, truncated) ──
-  const coachDetail = detailLines.find(l => l.trim() && !isBullet(l));
+  const icon  = EVENT_ICONS[event.type] ?? '•';
 
   function renderDetailContent(parentDone: boolean) {
     if (!event.detail) return null;
@@ -67,18 +75,14 @@ export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }
           const crossed = crossedLines.has(i);
           if (bullet) {
             return (
-              <TouchableOpacity
+              <BulletRow
                 key={i}
+                text={line.trimStart().replace(/^•\s*/, '')}
+                isCrossed={crossed}
                 onPress={() => setCrossedLines(prev => toggleSetItem(prev, i))}
-                activeOpacity={0.65}
-                style={s.bulletRow}>
-                <View style={[s.bulletDot, crossed && { backgroundColor: theme.success, borderColor: theme.success }]}>
-                  {crossed && <Text style={s.bulletCheck}>✓</Text>}
-                </View>
-                <Text style={[s.bulletText, crossed && s.bulletCrossed]}>
-                  {line.trimStart().replace(/^•\s*/, '')}
-                </Text>
-              </TouchableOpacity>
+                successColor={theme.success}
+                s={s}
+              />
             );
           }
           return <Text key={i} style={s.detailLine}>{line}</Text>;
@@ -137,27 +141,80 @@ export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }
       <View style={s.upcomingWrapper}>
         <Text style={s.upcomingTime}>{event.time}</Text>
         <View style={[s.upcomingCard, { borderLeftColor: color }]}>
-          <View style={s.upcomingTopRow}>
+          <TouchableOpacity
+            style={s.upcomingTopRow}
+            onPress={isExpandable ? () => setDetailExpanded(e => !e) : undefined}
+            activeOpacity={isExpandable ? 0.7 : 1}>
             <Text style={s.upcomingIcon}>{icon}</Text>
-            <Text style={s.upcomingLabel}>{event.label}</Text>
-            {event.duration && (
+            <Text style={s.upcomingLabel} numberOfLines={1}>{event.label}</Text>
+            {event.duration && !isGymEvent && (
               <View style={[s.upcomingDur, { backgroundColor: color + '20', borderColor: color + '40' }]}>
                 <Text style={[s.upcomingDurText, { color }]}>{event.duration}</Text>
               </View>
             )}
-          </View>
+            {isExpandable && (
+              <Text style={s.rcArrow}>{detailExpanded ? '▲' : '▼'}</Text>
+            )}
+          </TouchableOpacity>
 
-          {event.detail && !hasBullets && (
-            <Text style={s.upcomingDetail} numberOfLines={2}>{event.detail}</Text>
+          {hasBullets && (
+            detailExpanded
+              ? renderDetailContent(false)
+              : null
           )}
 
-          {event.detail && hasBullets && coachDetail && (
-            <Text style={s.upcomingDetail} numberOfLines={1}>{coachDetail}</Text>
+          {!hasBullets && !isGymEvent && event.detail && (
+            <Text
+              style={s.upcomingDetail}
+              numberOfLines={isTextLong && !detailExpanded ? 3 : undefined}
+              onTextLayout={(e) => {
+                if (textLineCount === null) {
+                  setTextLineCount(e.nativeEvent.lines.length);
+                }
+              }}>
+              {event.detail}
+            </Text>
           )}
 
-          {event.recipeId && event.recipeType && (
-            <RecipeCard recipeId={event.recipeId} recipeType={event.recipeType} />
+          {isGymEvent && event.detail && event.workoutType && (
+            <WorkoutCard
+              workoutType={event.workoutType}
+              workoutFocus={event.workoutFocus ?? ''}
+              duration={event.duration}
+              detail={event.detail}
+            />
           )}
+
+          {recipeOptions.length > 1 && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={s.swapLabel}>Choose one</Text>
+              <View style={s.swapRow}>
+                {recipeOptions.map(opt => {
+                  const active = selectedRecipeId === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[s.swapPill, active && s.swapPillActive]}
+                      onPress={() => setRecipeOverride(opt.id === event.recipeId ? null : opt.id)}
+                      activeOpacity={0.7}>
+                      <Text style={[s.swapPillText, active && s.swapPillTextActive]}>
+                        {opt.emoji}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {selectedRecipeId && event.recipeType && (
+            <RecipeCard
+              recipeId={selectedRecipeId}
+              recipeType={event.recipeType}
+              overrideMacros={event.macros}
+            />
+          )}
+
 
           <View style={s.checkboxRow}>
             <TouchableOpacity

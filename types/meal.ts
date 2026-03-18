@@ -9,6 +9,8 @@
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'smoothie';
 
+export const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'smoothie'];
+
 export type CuisineStyle =
   | 'generic'
   | 'asian'

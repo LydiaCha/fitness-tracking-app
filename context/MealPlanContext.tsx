@@ -32,6 +32,7 @@ import { safeGetItem, safeSetItem, safeRemoveItem, safeParseJSON } from '@/utils
 import { STORAGE_KEYS } from '@/utils/appConstants';
 import {
   MealRecord,
+  MealType,
   MealPlanSlot,
   MealPlanEntry,
   UserDietaryProfile,
@@ -64,15 +65,24 @@ export interface MealPlanState {
   nextGroceryList:     PlanGrocerySection[];
   isGeneratingNext:    boolean;
   nextGeneratedAt:     string | null;
+  nextWeekApproved:    boolean;
+}
+
+export interface MealSwapOverride {
+  day: number;
+  mealType: MealType;
+  mealId: string;
 }
 
 interface MealPlanCtx extends MealPlanState {
-  generatePlan:           (userProfile: UserProfile) => Promise<MealPlanEntry[]>;
-  generateNextWeekPlan:   (userProfile: UserProfile) => Promise<void>;
-  resetPlan:              () => Promise<void>;
-  getMealById:            (id: string) => MealRecord | undefined;
-  getEntriesForDay:       (day: number) => MealPlanEntry[];
+  generatePlan:             (userProfile: UserProfile) => Promise<MealPlanEntry[]>;
+  generateNextWeekPlan:     (userProfile: UserProfile) => Promise<void>;
+  approvePlan:              (overrides: MealSwapOverride[]) => Promise<void>;
+  resetPlan:                () => Promise<void>;
+  getMealById:              (id: string) => MealRecord | undefined;
+  getEntriesForDay:         (day: number) => MealPlanEntry[];
   getNextWeekEntriesForDay: (day: number) => MealPlanEntry[];
+  getAlternativesForEntry:  (entry: MealPlanEntry, count?: number) => MealRecord[];
 }
 
 // ─── Claude prompt builder (single-call for whole week) ───────────────────────
@@ -126,10 +136,19 @@ Only adjust if the standard serving is clearly far from the slot's calorie targe
     ? `\nLast week's meals (avoid repeating where possible): ${[...new Set(lastWeekMealIds)].join(', ')}\n`
     : '';
 
+  const restrictionText = userProfile.dietaryRestrictions?.length > 0
+    ? userProfile.dietaryRestrictions.join(', ')
+    : 'none';
+  const cuisineText = userProfile.cuisinePreferences?.length > 0
+    ? `Preferred cuisines: ${userProfile.cuisinePreferences.join(', ')}\n`
+    : '';
+  const prepText = `Max prep: ${userProfile.maxPrepMins ?? 30} min`;
+
   const userMessage = `User: ${userProfile.age}yo ${userProfile.gender}, ${userProfile.weightKg}kg
 Goals: ${goalTags.join(', ')}
 Daily targets: ${userProfile.calories} kcal · ${userProfile.protein}g P · ${userProfile.carbs}g C · ${userProfile.fat}g F
-Restrictions: none${lastWeekSection}
+Dietary restrictions: ${restrictionText}
+${cuisineText}${prepText}${lastWeekSection}
 ${slotLines}`;
 
   return { systemPrompt, userMessage };
@@ -152,10 +171,10 @@ function toDietaryProfile(
   recentMealIds: string[],
 ): UserDietaryProfile {
   return {
-    restrictions:          [],    // TODO: extend UserProfile to include dietary restrictions
-    dislikedIngredientIds: [],    // TODO: extend UserProfile to include dislikes
+    restrictions:          userProfile.dietaryRestrictions ?? [],
+    dislikedIngredientIds: userProfile.dislikedIngredientIds ?? [],
     goals:                 fitnessGoalToTags(userProfile.fitnessGoal),
-    maxPrepMins:           30,
+    maxPrepMins:           userProfile.maxPrepMins ?? 30,
     recentMealIds,
   };
 }
@@ -184,6 +203,7 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
     nextGroceryList:  [],
     isGeneratingNext: false,
     nextGeneratedAt:  null,
+    nextWeekApproved: false,
   });
 
   // Prevent duplicate generation calls
@@ -258,7 +278,7 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
     const slotCandidates: SlotCandidate[] = slots.map((slot, slotIndex) => {
       const candidates = filterMeals(slot, dietaryProfile);
       // Pass [] for already-planned (unknown upfront) and avoidMealIds for cross-week penalty
-      const scored     = scoreMeals(candidates, slot, [], avoidMealIds);
+      const scored     = scoreMeals(candidates, slot, [], avoidMealIds, dietaryProfile);
       return {
         slotIndex,
         slot,
@@ -314,6 +334,8 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
         if (fallback) {
           confirmedEntries.push(createPlanEntry(slot, fallback.meal, fallback.portionMultiplier));
           usedMealIds.push(fallback.meal.id);
+        } else {
+          console.warn(`[MealPlanContext] No candidates for slot ${i}: day=${slot?.day} type=${slot?.mealType}. Slot skipped.`);
         }
       }
 
@@ -417,8 +439,52 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
       nextGroceryList:  [],
       isGeneratingNext: false,
       nextGeneratedAt:  null,
+      nextWeekApproved: false,
     });
   }, []);
+
+  // ── Plan approval with optional meal swaps ────────────────────────────────
+  const approvePlan = useCallback(async (overrides: MealSwapOverride[]): Promise<void> => {
+    const updatedPlan = state.nextWeekPlan.map(entry => {
+      const override = overrides.find(
+        o => o.day === entry.slot.day && o.mealType === entry.slot.mealType,
+      );
+      if (!override) return entry;
+      const newMeal = getMeal(override.mealId);
+      if (!newMeal) return entry;
+      return createPlanEntry(entry.slot, newMeal, entry.portionMultiplier);
+    });
+    const nextGroceryList = buildPlanGroceryList(updatedPlan);
+    const now = new Date().toISOString();
+    await safeSetItem(
+      STORAGE_KEYS.AI_MEALS_NEXT_WEEK,
+      JSON.stringify({ weeklyPlan: updatedPlan, lastGeneratedAt: now }),
+    );
+    setState(s => ({
+      ...s,
+      nextWeekPlan:     updatedPlan,
+      nextGroceryList,
+      nextGeneratedAt:  now,
+      nextWeekApproved: true,
+    }));
+  }, [state.nextWeekPlan]);
+
+  // ── Get alternative meals for a slot ─────────────────────────────────────
+  const getAlternativesForEntry = useCallback(
+    (entry: MealPlanEntry, count = 2): MealRecord[] => {
+      // Use a permissive profile — alternatives are for review/swap, not strict planning
+      const openProfile: UserDietaryProfile = {
+        restrictions: [], dislikedIngredientIds: [], goals: [], maxPrepMins: 60, recentMealIds: [],
+      };
+      const candidates = filterMeals(entry.slot, openProfile);
+      const scored = scoreMeals(candidates, entry.slot, []);
+      return scored
+        .map(s => s.meal)
+        .filter(m => m.id !== entry.mealId)
+        .slice(0, count);
+    },
+    [],
+  );
 
   // ── Convenience helpers ───────────────────────────────────────────────────
   const getMealById = useCallback((id: string) => getMeal(id), []);
@@ -434,7 +500,7 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <Ctx.Provider value={{ ...state, generatePlan, generateNextWeekPlan, resetPlan, getMealById, getEntriesForDay, getNextWeekEntriesForDay }}>
+    <Ctx.Provider value={{ ...state, generatePlan, generateNextWeekPlan, approvePlan, resetPlan, getMealById, getEntriesForDay, getNextWeekEntriesForDay, getAlternativesForEntry }}>
       {children}
     </Ctx.Provider>
   );

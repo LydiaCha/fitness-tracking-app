@@ -50,11 +50,11 @@ export interface GrocerySection {
 
 // ─── Internal constants ───────────────────────────────────────────────────────
 
-const CATEGORY_ORDER: GroceryCategory[] = [
+export const CATEGORY_ORDER: GroceryCategory[] = [
   'protein', 'dairy', 'carbs', 'vegetables', 'fruit', 'frozen', 'pantry', 'drinks', 'supplements',
 ];
 
-const CATEGORY_META: Record<GroceryCategory, { label: string; emoji: string }> = {
+export const CATEGORY_META: Record<GroceryCategory, { label: string; emoji: string }> = {
   protein:     { label: 'Protein',        emoji: '🥩' },
   dairy:       { label: 'Dairy',          emoji: '🥛' },
   carbs:       { label: 'Carbs & Grains', emoji: '🌾' },

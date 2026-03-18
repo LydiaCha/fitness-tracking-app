@@ -12,7 +12,8 @@ export function getTodayId(): string {
 export const STORAGE_KEYS = {
   // Fitness logs
   WORKOUTS:      '@peakroutine/workouts',
-  WATER:         '@peakroutine/water',
+  WATER_GOAL:    '@peakroutine/water',       // Record<dateKey, boolean> — daily goal met
+  WATER_ML:      '@peakroutine/quick_water', // Record<dateKey, number>  — daily ml total
   WEIGHTS:       '@peakroutine/weights',
   HABITS:        '@peakroutine/habits',
   // Meal tracking

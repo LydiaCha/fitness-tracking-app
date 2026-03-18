@@ -24,6 +24,8 @@ import {
   GroceryCategory,
   IngredientUnit,
 } from '@/types/meal';
+import { CuisinePreference } from '@/constants/userProfile';
+import { CATEGORY_META as GROCERY_CATEGORY_META, CATEGORY_ORDER as GROCERY_CATEGORY_ORDER } from '@/utils/groceryList';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,6 +129,7 @@ export function scoreMeals(
   alreadyPlannedMeals: MealRecord[],
   /** Meal IDs to penalise (e.g. last week's plan) — avoids cross-week repetition */
   avoidMealIds: string[] = [],
+  profile?: Pick<UserDietaryProfile, 'cuisinePreferences'>,
 ): ScoredMeal[] {
   // Build the set of ingredient IDs already in this week's plan
   const plannedIngredientIds = new Set(
@@ -172,7 +175,12 @@ export function scoreMeals(
       // ── Cross-week avoid penalty (-30) ────────────────────────────────────
       const avoidPenalty = avoidSet.has(meal.id) ? -30 : 0;
 
-      const score = ingredientOverlap + goalAlignment + varietyBonus + calorieProximity + avoidPenalty;
+      // ── Cuisine preference bonus (+10) ────────────────────────────────────
+      const cuisineBonus = profile?.cuisinePreferences && profile.cuisinePreferences.length > 0 &&
+        profile.cuisinePreferences.includes(meal.cuisine as CuisinePreference)
+          ? 10 : 0;
+
+      const score = ingredientOverlap + goalAlignment + varietyBonus + calorieProximity + avoidPenalty + cuisineBonus;
 
       return {
         meal,
@@ -345,21 +353,6 @@ export function createPlanEntry(
 
 // ─── 5. Grocery List from Plan ────────────────────────────────────────────────
 
-const GROCERY_CATEGORY_META: Record<GroceryCategory, { label: string; emoji: string }> = {
-  protein:     { label: 'Protein',        emoji: '🥩' },
-  dairy:       { label: 'Dairy',          emoji: '🥛' },
-  carbs:       { label: 'Carbs & Grains', emoji: '🌾' },
-  vegetables:  { label: 'Vegetables',     emoji: '🥦' },
-  fruit:       { label: 'Fruit',          emoji: '🍌' },
-  frozen:      { label: 'Frozen',         emoji: '🧊' },
-  pantry:      { label: 'Pantry',         emoji: '🫙' },
-  drinks:      { label: 'Drinks',         emoji: '🥤' },
-  supplements: { label: 'Supplements',    emoji: '💊' },
-};
-
-const GROCERY_CATEGORY_ORDER: GroceryCategory[] = [
-  'protein', 'dairy', 'carbs', 'vegetables', 'fruit', 'frozen', 'pantry', 'drinks', 'supplements',
-];
 
 // Units that can be summed directly (same unit = just add quantities)
 const SUMMABLE_UNITS = new Set<IngredientUnit>(['g', 'ml', 'cup', 'tbsp', 'tsp', 'scoop', 'piece', 'slice', 'can']);
