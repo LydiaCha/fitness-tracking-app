@@ -7,7 +7,7 @@ import { useAppTheme } from '@/context/ThemeContext';
 import { AppThemeType } from '@/constants/theme';
 import { useOnboarding } from '@/context/OnboardingContext';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 7;
 
 const GYM_OPTIONS = [
   { days: 2, label: '2 days',  desc: 'Great for getting started' },
@@ -61,9 +61,9 @@ export default function Step5() {
           </TouchableOpacity>
           <TouchableOpacity
             style={s.nextBtn}
-            onPress={() => router.push('/(onboarding)/done')}
+            onPress={() => router.push('/(onboarding)/step-6')}
           >
-            <Text style={s.nextBtnText}>See my plan →</Text>
+            <Text style={s.nextBtnText}>Continue →</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -79,7 +79,7 @@ const styles = (theme: AppThemeType) => StyleSheet.create({
   progressDotActive: { backgroundColor: theme.primary },
   content: { flex: 1, justifyContent: 'center', gap: 12 },
   emoji:   { fontSize: 48 },
-  heading: { fontSize: 28, fontWeight: '700', color: theme.textPrimary },
+  heading: { fontSize: 26, fontWeight: '700', color: theme.textPrimary },
   sub:     { fontSize: 16, color: theme.textMuted, lineHeight: 22 },
   options: { gap: 10, marginTop: 16 },
   option: {

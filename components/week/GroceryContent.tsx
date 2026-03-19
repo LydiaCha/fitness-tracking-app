@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AppThemeType } from '@/constants/theme';
 import { useMealPlan } from '@/context/MealPlanContext';
 import { GroceryCategory, GroceryItem, GrocerySection, categoryAccent, formatGroceryList } from '@/utils/groceryList';
-import { PlanStyles } from '@/app/(tabs)/plan.styles';
+import { WeekStyles } from '@/app/(tabs)/week.styles';
 import { STORAGE_KEYS, toKey, getWeekDatesMonFirst } from '@/utils/appConstants';
 import { safeGetItem, safeSetItem, safeParseJSON } from '@/utils/storage';
 
@@ -33,7 +33,7 @@ function ItemRow({
   isLast: boolean;
   onToggle: (id: string) => void;
   accent: string;
-  s: PlanStyles;
+  s: WeekStyles;
 }) {
   return (
     <>
@@ -69,7 +69,7 @@ function SectionCard({
   onToggleCollapse: (cat: GroceryCategory) => void;
   onToggleItem: (id: string) => void;
   theme: AppThemeType;
-  s: PlanStyles;
+  s: WeekStyles;
 }) {
   const accent       = categoryAccent(section.category, theme);
   const checkedCount = section.items.filter(i => checkedIds.has(i.id)).length;
@@ -94,7 +94,7 @@ function SectionCard({
             {checkedCount > 0 ? `${checkedCount} / ` : ''}{section.items.length} items
           </Text>
         )}
-        <Text style={s.chevron}>{isCollapsed ? '›' : '⌄'}</Text>
+        <Text style={[s.chevron, !isCollapsed && s.chevronOpen]}>›</Text>
       </TouchableOpacity>
 
       {!isCollapsed && (
@@ -120,9 +120,11 @@ function SectionCard({
 export function GroceryContent({
   theme,
   s,
+  onBack,
 }: {
   theme: AppThemeType;
-  s: PlanStyles;
+  s: WeekStyles;
+  onBack?: () => void;
 }) {
   const { groceryList: planGroceryList, weeklyPlan } = useMealPlan();
 
@@ -207,6 +209,12 @@ export function GroceryContent({
 
   return (
     <>
+      {onBack && (
+        <TouchableOpacity style={s.groceryBackBtn} onPress={onBack} activeOpacity={0.7}>
+          <Text style={[s.groceryBackBtnText, { color: theme.meal }]}>← Meals</Text>
+        </TouchableOpacity>
+      )}
+
       {/* ── Instruction header ── */}
       <LinearGradient
         colors={['#10b981', '#0891b2']}

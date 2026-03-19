@@ -72,10 +72,11 @@ export async function callClaude(params: {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model:      MODEL,
-        max_tokens: params.maxTokens ?? 2048,
-        system:     params.systemPrompt,
-        messages:   [{ role: 'user', content: params.userMessage }],
+        model:       MODEL,
+        max_tokens:  params.maxTokens ?? 2048,
+        temperature: 0.3,  // low temperature for deterministic, debuggable selections
+        system:      params.systemPrompt,
+        messages:    [{ role: 'user', content: params.userMessage }],
       }),
     });
 
@@ -141,11 +142,15 @@ export function extractJSON<T>(text: string): T | null {
     if (depth === 0) { end = i; break; }
   }
 
-  if (end === -1) return null;
+  if (end === -1) {
+    console.warn('[claudeApi] extractJSON: no matching closing bracket found in response');
+    return null;
+  }
 
   try {
     return JSON.parse(text.slice(start, end + 1)) as T;
-  } catch {
+  } catch (e) {
+    console.warn('[claudeApi] extractJSON: JSON.parse failed —', String(e), '— raw text slice:', text.slice(start, end + 1).slice(0, 200));
     return null;
   }
 }

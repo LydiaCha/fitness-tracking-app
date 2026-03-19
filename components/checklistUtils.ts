@@ -3,7 +3,7 @@ import { AppTheme } from '@/constants/theme';
 export const EVENT_ICONS: Record<string, string> = {
   wake: '🌅', sleep: '😴', work: '💻', class: '📚', gym: '🏋️',
   meal: '🍽️', snack: '🍎', shake: '🥤', supplement: '💊', water: '💧',
-  rest: '☁️', yoga: '🧘', prep: '📋', free: '🌟', 'plan-review': '📅',
+  rest: '☁️', yoga: '🧘', prep: '📋', free: '🌟', 'plan-review': '📅', custom: '⭐',
 };
 
 // Accent colours — identical in both themes, safe to use at module level

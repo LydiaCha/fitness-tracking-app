@@ -89,7 +89,7 @@ export function RecipeCard({ recipeId, recipeType, overrideMacros }: Props) {
           <Text style={[s.rcMacro, { color: theme.meal }]}>🔥 {macros.calories} kcal</Text>
           <Text style={[s.rcMacro, { color: theme.primary }]}>💪 {macros.protein}g</Text>
           <Text style={[s.rcMacro, { color: theme.water }]}>🌾 {macros.carbs}g</Text>
-          <Text style={[s.rcMacro, { color: theme.supplement }]}>🧈 {macros.fat}g fat</Text>
+          <Text style={[s.rcMacro, { color: theme.supplement }]}>🥑 {macros.fat}g fat</Text>
         </View>
 
         {expanded && (
@@ -151,7 +151,7 @@ export function RecipeCard({ recipeId, recipeType, overrideMacros }: Props) {
         <Text style={[s.rcMacro, { color: theme.meal }]}>🔥 {macros.calories} kcal</Text>
         <Text style={[s.rcMacro, { color: theme.primary }]}>💪 {macros.protein}g</Text>
         <Text style={[s.rcMacro, { color: theme.water }]}>🌾 {macros.carbs}g</Text>
-        <Text style={[s.rcMacro, { color: theme.supplement }]}>🧈 {macros.fat}g fat</Text>
+        <Text style={[s.rcMacro, { color: theme.supplement }]}>🥑 {macros.fat}g fat</Text>
       </View>
 
       {expanded && (

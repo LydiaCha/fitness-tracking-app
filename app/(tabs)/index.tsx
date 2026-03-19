@@ -12,31 +12,43 @@ import {
   Platform,
   Animated,
   Easing,
+  AppState,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ScannedProduct, fetchProduct, identifyFoodFromPhoto } from '@/utils/foodApi';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScrollToTop } from '@react-navigation/native';
-import { createIndexStyles } from './index.styles';
+import { createIndexStyles } from '@/styles/index.styles';
 import { useAppTheme } from '@/context/ThemeContext';
-import { WEEK_SCHEDULE, DaySchedule, ScheduleEvent } from '@/constants/scheduleData';
+import { DaySchedule, ScheduleEvent } from '@/constants/scheduleData';
 import { useWeeklyPlan } from '@/context/WeeklyPlanContext';
-import { useMealPlan } from '@/context/MealPlanContext';
 import { getMeal } from '@/constants/mealDatabase';
 import { MACRO_TARGETS, SHAKE_RECIPES, MEAL_IDEAS } from '@/constants/nutritionData';
-import { getTodayId, STORAGE_KEYS, toKey } from '@/utils/appConstants';
-import { loadUserProfile } from '@/constants/userProfile';
-import { loadStreak } from '@/utils/streak';
+import { getTodayId, STORAGE_KEYS, toKey, DAYS } from '@/utils/appConstants';
+import { loadCustomActivities, customToEvent, CustomActivity } from '@/utils/customActivities';
+import { useUserProfile } from '@/context/UserProfileContext';
+import { loadActivityStreak } from '@/utils/streak';
+import { getDailyCoachNote } from '@/utils/coach';
+import { useSteps, DEFAULT_STEP_GOAL } from '@/hooks/useSteps';
+import { logMeal } from '@/utils/mealLog';
+import { loadTodayLog, WorkoutLog } from '@/utils/strengthLog';
+import { SessionSummary } from '@/components/WorkoutCard';
+import { loadWaterMl, logWater } from '@/utils/waterLog';
 import { logSheetEvents } from '@/utils/logSheetEvents';
 import { ChecklistItem } from '@/components/ChecklistItem';
-import { safeMergeItem } from '@/utils/storage';
+import { PlanReviewSheet } from '@/components/week/PlanReviewSheet';
+import { WorkoutLogSheet } from '@/components/WorkoutLogSheet';
+import { safeMergeItem, safeGetItem, safeSetItem, safeParseJSON } from '@/utils/storage';
 import { Confetti } from '@/components/Confetti';
 import { NextUpCard } from '@/components/NextUpCard';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { getTodayConflict } from '@/utils/scheduleConflicts';
 
-// Returns ml of water this event represents (water + wake events only)
+const MS_PER_DAY             = 86_400_000;
+const DEFAULT_WAKE_WATER_ML  = 500; // ml assumed for a wake event with no explicit amount
+const DEFAULT_WATER_EVENT_ML = 250; // ml assumed for a water event with no explicit amount
 
 // Returns ml of water a schedule event represents (wake + water types only)
 function getEventWaterMl(event: ScheduleEvent): number {
@@ -46,7 +58,7 @@ function getEventWaterMl(event: ScheduleEvent): number {
   if (mlMatch) return parseInt(mlMatch[1], 10);
   const lMatch  = d.match(/(\d+(?:\.\d+)?)\s*L\b/i);
   if (lMatch)  return Math.round(parseFloat(lMatch[1]) * 1000);
-  return event.type === 'wake' ? 500 : 250; // sensible defaults
+  return event.type === 'wake' ? DEFAULT_WAKE_WATER_ML : DEFAULT_WATER_EVENT_ML;
 }
 
 // Returns macros for a meal/shake event
@@ -76,17 +88,44 @@ function getEventMacros(event: ScheduleEvent): { calories: number; protein: numb
 }
 
 
-function buildDailyFocus(day: DaySchedule, waterTargetMl: number): string {
-  const parts: string[] = [];
-  if (day.isGymDay && day.workoutFocus) parts.push(day.workoutFocus);
-  else if (day.isGymDay) parts.push('Gym');
-  else if (day.isRestDay) parts.push('Rest day');
-  if (day.isClassDay && day.classTime) parts.push(`Class ${day.classTime}`);
-  const waterL = (waterTargetMl / 1000 % 1 === 0)
+function buildDailyFocus(
+  day: DaySchedule,
+  waterTargetMl: number,
+  todayDone: number,
+  todayTotal: number,
+  quickWaterMl: number,
+): string {
+  const hour      = new Date().getHours();
+  const tasksLeft = Math.max(0, todayTotal - todayDone);
+
+  // Water — show live progress once anything has been logged
+  const targetL  = waterTargetMl / 1000 % 1 === 0
     ? `${waterTargetMl / 1000}L`
     : `${(waterTargetMl / 1000).toFixed(1)}L`;
-  parts.push(`${waterL} water`);
-  return parts.join(' · ');
+  const waterStr = quickWaterMl > 0
+    ? `${(quickWaterMl / 1000).toFixed(1)}/${targetL} 💧`
+    : `${targetL} water`;
+
+  // All done — celebrate
+  if (todayTotal > 0 && tasksLeft === 0) return 'All done — perfect day ✅';
+
+  // Morning (before noon) — show the plan
+  if (hour < 12) {
+    if (day.isGymDay) return `${day.workoutFocus || 'Gym'} · ${waterStr}`;
+    if (day.isRestDay) return `Rest & recover · ${waterStr}`;
+    return `${waterStr} · hit your targets`;
+  }
+
+  // Afternoon (noon–5pm) — progress mode
+  if (hour < 17) {
+    const t = `${tasksLeft} task${tasksLeft !== 1 ? 's' : ''} left`;
+    return `${t} · ${waterStr}`;
+  }
+
+  // Evening (5pm+) — closing mode
+  const t = `${tasksLeft} task${tasksLeft !== 1 ? 's' : ''}`;
+  if (tasksLeft <= 2) return `${t} to finish strong 💪`;
+  return `${t} left · ${waterStr}`;
 }
 
 // ─── Animated progress bar ───────────────────────────────────────────────────
@@ -155,7 +194,7 @@ function getMotivation() {
   ];
   // Rotate daily by date so it changes every day, not every week
   const today = new Date();
-  const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
+  const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / MS_PER_DAY);
   return phrases[dayOfYear % phrases.length];
 }
 
@@ -164,22 +203,37 @@ function getMotivation() {
 export default function HomeScreen() {
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
+  const hydrationCardY   = useRef(0);
+  const [hydrationHighlight, setHydrationHighlight] = useState(false);
   const { theme, isDark } = useAppTheme();
   const s = useMemo(() => createIndexStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [conflictDismissed, setConflictDismissed] = useState(false);
 
-  const { weeklySchedule, isGenerating: scheduleGenerating, error: scheduleError, generateWeeklyPlan } = useWeeklyPlan();
-  const { progress } = useMealPlan();
+  const { weeklySchedule, setDayWorkoutFocus } = useWeeklyPlan();
 
   const [allCheckedEvents,  setAllCheckedEvents]  = useState<Record<string, Set<number>>>({});
   const [allSkippedEvents,  setAllSkippedEvents]  = useState<Record<string, Set<number>>>({});
-  const [showConfetti,   setShowConfetti]   = useState(false);
-  const [quickLogOpen,   setQuickLogOpen]   = useState<'menu' | 'log-meal' | 'log-water' | null>(null);
+  const [showConfetti,      setShowConfetti]      = useState(false);
+  const [planReviewOpen,    setPlanReviewOpen]    = useState(false);
+  const [planReviewEventIdx, setPlanReviewEventIdx] = useState<number | null>(null);
+  const [logSheetFocus,    setLogSheetFocus]    = useState<string | null>(null);
+  const [sessionSummary,   setSessionSummary]   = useState<SessionSummary | null>(null);
+  const [quickLogOpen,   setQuickLogOpen]   = useState<'menu' | 'log-meal' | null>(null);
   const [quickWaterMl,   setQuickWaterMl]   = useState(0);
   const [quickMealName,  setQuickMealName]  = useState('');
   const [quickMealCal,   setQuickMealCal]   = useState('');
   const [quickMealProt,  setQuickMealProt]  = useState('');
-  const [profileName, setProfileName] = useState('');
+  const { profile, effectiveMacros } = useUserProfile();
+  const profileName  = profile.name;
+  const todayConflict = useMemo(() => getTodayConflict(profile), [profile]);
+  const macroTargets = effectiveMacros;
   const [streak, setStreak] = useState(0);
+  const [customActivities, setCustomActivities] = useState<CustomActivity[]>([]);
+  const steps = useSteps();
+
+
 
   const prevDoneRef  = useRef(0);
   const itemViewRefs = useRef<Array<View | null>>([]);
@@ -231,12 +285,36 @@ export default function HomeScreen() {
   }, []);
   const todayId = getTodayId();
   const [selectedDayId, setSelectedDayId] = useState(todayId);
-  const schedule = weeklySchedule ?? WEEK_SCHEDULE; // hooks need non-null; loading gate below hides WEEK_SCHEDULE from users
+  const schedule = weeklySchedule;
   const today = schedule.find((d: DaySchedule) => d.id === todayId) ?? schedule[0];
   const selectedDay = schedule.find((d: DaySchedule) => d.id === selectedDayId) ?? today;
+  // Mon-first day index (0=Mon … 6=Sun) used by setDayWorkoutFocus
+  const selectedDayIndex = schedule.indexOf(selectedDay);
+
+  // Focus strings from OTHER gym days this week — used for balance nudge in WorkoutCard
+  const otherDayFocuses = useMemo(() =>
+    schedule
+      .filter((_, i) => i !== selectedDayIndex)
+      .flatMap(d => d.events)
+      .filter(e => e.type === 'gym' && e.workoutFocus)
+      .map(e => e.workoutFocus!),
+    [schedule, selectedDayIndex],
+  );
+  // Merge user-defined custom activities for the selected day (appended after schedule events)
+  const dayJsIndex = DAYS.indexOf(selectedDayId as typeof DAYS[number]);
+  const mergedEvents = useMemo((): ScheduleEvent[] => {
+    const customForDay = customActivities
+      .filter(a => a.daysOfWeek.includes(dayJsIndex))
+      .map(customToEvent);
+    const base = profile.supplementsEnabled
+      ? selectedDay.events
+      : selectedDay.events.filter(e => e.type !== 'supplement');
+    return [...base, ...customForDay];
+  }, [selectedDay.events, customActivities, dayJsIndex, profile.supplementsEnabled]);
+
   const checkedEvents  = allCheckedEvents[selectedDayId]  ?? new Set<number>();
   const skippedEvents  = allSkippedEvents[selectedDayId]  ?? new Set<number>();
-  const total = selectedDay.events.length;
+  const total = mergedEvents.length;
   const done    = checkedEvents.size;
   const skipped = skippedEvents.size;
   const isViewingToday = selectedDayId === todayId;
@@ -250,30 +328,56 @@ export default function HomeScreen() {
     prevDoneRef.current = done + skipped;
   }, [done, skipped, total, isViewingToday]);
 
-  const QUICK_WATER_KEY = '@peakroutine/quick_water';
+  const refreshSessionSummary = useCallback(() => {
+    const key = toKey(new Date());
+    loadTodayLog(key).then(log => {
+      if (!log || log.sets.length === 0) { setSessionSummary(null); return; }
+      const exerciseCount = new Set(log.sets.map(s => s.exerciseId)).size;
+      const totalSets     = log.sets.length;
+      const volumeKg      = Math.round(log.sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0));
+      setSessionSummary({ exerciseCount, totalSets, volumeKg });
+    }).catch(() => {});
+  }, []);
 
   useFocusEffect(useCallback(() => {
-    const key = toKey(new Date());
-    AsyncStorage.getItem(QUICK_WATER_KEY).then(raw => {
-      if (!raw) return;
-      const data: Record<string, number> = JSON.parse(raw);
-      setQuickWaterMl(data[key] ?? 0);
+    loadWaterMl().then(setQuickWaterMl).catch((err) => console.warn('[Today] loadWaterMl:', err));
+    loadActivityStreak().then(setStreak).catch((err) => console.warn('[Today] loadActivityStreak:', err));
+    loadCustomActivities().then(setCustomActivities).catch(() => {});
+    refreshSessionSummary();
+    // Restore today's checked events from storage so restarts don't reset progress
+    const todayKey = toKey(new Date());
+    safeGetItem(STORAGE_KEYS.EVENT_LOG).then(raw => {
+      const stored = safeParseJSON<Record<string, number[]>>(raw, {});
+      const indices = stored[todayKey];
+      if (indices && indices.length > 0) {
+        setAllCheckedEvents(prev => ({ ...prev, [todayId]: new Set(indices) }));
+      }
     }).catch(() => {});
-    loadStreak().then(setStreak).catch(() => {});
-    loadUserProfile().then(p => setProfileName(p.name)).catch(() => {});
-  }, []));
+  }, [refreshSessionSummary, todayId]));
+
+  // Detect date change when app resumes from background (midnight crossing)
+  const lastDateRef = useRef(toKey(new Date()));
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', nextState => {
+      if (nextState !== 'active') return;
+      const today = toKey(new Date());
+      if (today === lastDateRef.current) return;
+      lastDateRef.current = today;
+      // Re-anchor the day selector to the new today
+      setSelectedDayId(getTodayId());
+      // Reload day-scoped data
+      loadWaterMl().then(setQuickWaterMl).catch(() => {});
+      loadActivityStreak().then(setStreak).catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
 
   const gymIdx  = useMemo(() => today.events.findIndex(e => e.type === 'gym'), [today.events]);
 
   const addQuickWater = useCallback(async (ml: number) => {
-    const key = toKey(new Date());
-    const next = Math.max(0, quickWaterMl + ml);
+    const next = Math.min(5000, Math.max(0, quickWaterMl + ml));
     setQuickWaterMl(next);
-    const raw  = await AsyncStorage.getItem(QUICK_WATER_KEY).catch(() => null);
-    const data: Record<string, number> = raw ? JSON.parse(raw) : {};
-    data[key] = next;
-    await AsyncStorage.setItem(QUICK_WATER_KEY, JSON.stringify(data)).catch(() => {});
-    safeMergeItem(STORAGE_KEYS.WATER, JSON.stringify({ [key]: next >= 2500 }));
+    await logWater(next);
   }, [quickWaterMl]);
 
   const logQuickWorkout = useCallback(() => {
@@ -292,14 +396,9 @@ export default function HomeScreen() {
   const scannedRef = useRef(false);
 
   const autoLogProduct = useCallback(async (product: ScannedProduct) => {
-    const key  = toKey(new Date());
-    const entry = { id: `scan-${Date.now()}`, name: product.name, emoji: product.emoji,
+    await logMeal({ id: `scan-${Date.now()}`, name: product.name, emoji: product.emoji,
       calories: product.calories, protein: product.protein, carbs: product.carbs,
-      fat: product.fat, servingLabel: product.servingLabel };
-    const raw  = await AsyncStorage.getItem(STORAGE_KEYS.MEAL_LOGS).catch(() => null);
-    const data: Record<string, typeof entry[]> = raw ? JSON.parse(raw) : {};
-    data[key]  = [...(data[key] ?? []), entry];
-    await AsyncStorage.setItem(STORAGE_KEYS.MEAL_LOGS, JSON.stringify(data)).catch(() => {});
+      fat: product.fat, servingLabel: product.servingLabel });
     setQuickLogOpen(null);
   }, []);
 
@@ -334,13 +433,8 @@ export default function HomeScreen() {
 
   const logQuickMeal = useCallback(async () => {
     if (!quickMealName.trim()) return;
-    const key   = toKey(new Date());
-    const entry = { id: `quick-${Date.now()}`, name: quickMealName.trim(), emoji: '🍽️',
-      calories: parseInt(quickMealCal) || 0, protein: parseInt(quickMealProt) || 0, carbs: 0, fat: 0 };
-    const raw  = await AsyncStorage.getItem(STORAGE_KEYS.MEAL_LOGS).catch(() => null);
-    const data: Record<string, typeof entry[]> = raw ? JSON.parse(raw) : {};
-    data[key] = [...(data[key] ?? []), entry];
-    await AsyncStorage.setItem(STORAGE_KEYS.MEAL_LOGS, JSON.stringify(data)).catch(() => {});
+    await logMeal({ id: `quick-${Date.now()}`, name: quickMealName.trim(), emoji: '🍽️',
+      calories: parseInt(quickMealCal) || 0, protein: parseInt(quickMealProt) || 0, carbs: 0, fat: 0 });
     setQuickMealName(''); setQuickMealCal(''); setQuickMealProt('');
     setQuickLogOpen(null);
   }, [quickMealName, quickMealCal, quickMealProt]);
@@ -376,12 +470,26 @@ export default function HomeScreen() {
   const todayTotal = today.events.length;
   const todayDone  = (allCheckedEvents[todayId] ?? new Set()).size;
 
+  const coachNote = useMemo(
+    () => getDailyCoachNote(
+      !!today.isGymDay,
+      !!today.isRestDay,
+      streak,
+      steps.todaySteps,
+      DEFAULT_STEP_GOAL,
+      profile.fitnessGoal,
+      profile.gymDays.length,
+    ),
+    [today.isGymDay, today.isRestDay, streak, steps.todaySteps, profile.fitnessGoal, profile.gymDays.length],
+  );
+
   const toggleEvent = useCallback((idx: number) => {
     const daySet = new Set(allCheckedEvents[selectedDayId] ?? []);
     const wasDone = daySet.has(idx);
     wasDone ? daySet.delete(idx) : daySet.add(idx);
     setAllCheckedEvents(prev => ({ ...prev, [selectedDayId]: daySet }));
-    if (!wasDone) showToast(selectedDay.events[idx]);
+    const event = mergedEvents[idx];
+    if (!wasDone) showToast(event);
     // Unmark skipped if toggling done
     setAllSkippedEvents(prev => {
       const s = new Set(prev[selectedDayId] ?? []);
@@ -389,9 +497,8 @@ export default function HomeScreen() {
       return { ...prev, [selectedDayId]: s };
     });
 
-    if (selectedDayId === todayId) {
+    if (event && selectedDayId === todayId) {
       const todayKey = toKey(new Date());
-      const event = selectedDay.events[idx];
       if (event.type === 'gym') {
         safeMergeItem(STORAGE_KEYS.WORKOUTS, JSON.stringify({ [todayKey]: daySet.has(idx) }));
       }
@@ -399,8 +506,13 @@ export default function HomeScreen() {
       if (waterMl > 0) {
         addQuickWater(daySet.has(idx) ? waterMl : -waterMl);
       }
+      // Persist today's full checked set so restarts don't reset the checklist
+      // Only today's data is ever read back — write a single-entry object so
+      // the key stays lean and old dates never accumulate.
+      safeSetItem(STORAGE_KEYS.EVENT_LOG, JSON.stringify({ [todayKey]: [...daySet] }))
+        .catch(() => {});
     }
-  }, [allCheckedEvents, selectedDayId, todayId, selectedDay.events, addQuickWater, showToast]);
+  }, [allCheckedEvents, selectedDayId, todayId, mergedEvents, addQuickWater, showToast]);
 
   const toggleSkip = useCallback((idx: number) => {
     setAllSkippedEvents(prev => {
@@ -416,54 +528,6 @@ export default function HomeScreen() {
     });
   }, [selectedDayId]);
 
-  // ── Loading / error gate ─────────────────────────────────────────────────
-  if (!weeklySchedule) {
-    const progressLabel =
-      progress <= 1  ? 'Filtering & scoring meals…' :
-      progress <= 10 ? 'Asking Claude to plan your week…' :
-                       `Selecting meals… ${Math.round(progress)}%`;
-
-    return (
-      <SafeAreaView style={s.safe}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
-        <ScrollView contentContainerStyle={[s.content, { flexGrow: 1, justifyContent: 'center' }]}>
-          <LinearGradient
-            colors={['#86198f', '#7c3aed', '#3730a3']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={[s.heroCard, { marginBottom: 0 }]}>
-            <View style={s.heroShine} />
-            <Text style={[s.heroGreeting, { marginBottom: 8 }]}>{getGreeting()}</Text>
-            <Text style={[s.heroName, { marginBottom: 4 }]}>
-              {scheduleGenerating ? 'Building your week…' : 'Something went wrong'}
-            </Text>
-            <Text style={[s.heroMotivation, { marginBottom: 20 }]}>
-              {scheduleGenerating
-                ? progressLabel
-                : scheduleError ?? 'Could not generate your plan.'}
-            </Text>
-
-            {scheduleGenerating ? (
-              <>
-                <View style={{ height: 6, backgroundColor: '#ffffff25', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
-                  <View style={{ height: 6, borderRadius: 3, backgroundColor: '#fff', width: `${Math.max(progress, 4)}%` as any }} />
-                </View>
-                <ActivityIndicator color="#ffffffaa" size="small" style={{ marginTop: 8 }} />
-              </>
-            ) : (
-              <TouchableOpacity
-                onPress={() => generateWeeklyPlan()}
-                activeOpacity={0.8}
-                style={{ backgroundColor: '#ffffff33', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 4 }}>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Try Again</Text>
-              </TouchableOpacity>
-            )}
-          </LinearGradient>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // After this point weeklySchedule is guaranteed non-null
   return (
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
@@ -472,9 +536,8 @@ export default function HomeScreen() {
         {/* ── Hero Card ── */}
         <LinearGradient
           colors={['#86198f', '#7c3aed', '#3730a3']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.heroCard}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={[s.heroCard, { marginBottom: 20 }]}
         >
           <View style={s.heroShine} />
           <View style={s.heroTopRow}>
@@ -490,12 +553,9 @@ export default function HomeScreen() {
               {today.isClassDay && <View style={s.heroBadge}><Text style={s.heroBadgeText}>📚 Class</Text></View>}
             </View>
           </View>
-
           <View style={s.heroDivider} />
-
           <Text style={s.heroFocusLabel}>DAILY FOCUS</Text>
-          <Text style={s.heroFocus}>{buildDailyFocus(today, MACRO_TARGETS.water)}</Text>
-
+          <Text style={s.heroFocus}>{buildDailyFocus(today, MACRO_TARGETS.water, todayDone, todayTotal, quickWaterMl)}</Text>
           <View style={s.heroBarRow}>
             <View style={s.heroSegments}>
               {Array.from({ length: 10 }, (_, i) => {
@@ -507,6 +567,40 @@ export default function HomeScreen() {
           </View>
         </LinearGradient>
 
+        {/* ── Schedule conflict callout ── */}
+        {todayConflict && !conflictDismissed && (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            backgroundColor: theme.warning + '18',
+            borderWidth: 1, borderColor: theme.warning + '55',
+            borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+            marginBottom: 16,
+          }}>
+            <Ionicons name="warning-outline" size={18} color={theme.warning} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: theme.warning }}>
+                Schedule conflict today
+              </Text>
+              <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2, lineHeight: 17 }}>
+                {todayConflict.type === 'work-past-sleep'
+                  ? `Work ends at ${profile.weekSchedule[todayConflict.jsDay]?.workEnd} — after your sleep time.`
+                  : `Work starts at ${profile.weekSchedule[todayConflict.jsDay]?.workStart} — before your wake time.`}
+              </Text>
+            </View>
+            <View style={{ gap: 6, alignItems: 'flex-end' }}>
+              <TouchableOpacity
+                onPress={() => router.push('/my-schedule')}
+                activeOpacity={0.8}
+                style={{ backgroundColor: theme.warning, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>Fix</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setConflictDismissed(true)} activeOpacity={0.7}>
+                <Text style={{ fontSize: 11, color: theme.textMuted }}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* ── Next Up ── */}
         {isViewingToday && nextUpIdx !== -1 && (
           <NextUpCard
@@ -517,23 +611,31 @@ export default function HomeScreen() {
           />
         )}
 
+        {/* ── Coach Note ── */}
+        {isViewingToday && coachNote && (
+          <View style={s.coachNoteCard}>
+            <Text style={s.coachNoteIcon}>🧠</Text>
+            <Text style={s.coachNoteText}>{coachNote}</Text>
+          </View>
+        )}
+
         {/* ── Daily Targets ── */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>📊 Daily Targets</Text>
           <View style={s.targetsCard}>
             {[
               { label: 'Calories', emoji: '🔥', color: theme.meal,
-                consumed: consumedWithQuick.calories, target: MACRO_TARGETS.calories,
-                valueStr: `${consumedWithQuick.calories}`, targetStr: `${MACRO_TARGETS.calories} kcal` },
+                consumed: consumedWithQuick.calories, target: macroTargets.calories,
+                valueStr: `${consumedWithQuick.calories}`, targetStr: `${macroTargets.calories} kcal` },
               { label: 'Protein',  emoji: '💪', color: theme.primary,
-                consumed: consumedWithQuick.protein,  target: MACRO_TARGETS.protein,
-                valueStr: `${consumedWithQuick.protein}g`, targetStr: `${MACRO_TARGETS.protein}g` },
+                consumed: consumedWithQuick.protein,  target: macroTargets.protein,
+                valueStr: `${consumedWithQuick.protein}g`, targetStr: `${macroTargets.protein}g` },
               { label: 'Carbs',    emoji: '🌾', color: theme.water,
-                consumed: consumedWithQuick.carbs,    target: MACRO_TARGETS.carbs,
-                valueStr: `${consumedWithQuick.carbs}g`, targetStr: `${MACRO_TARGETS.carbs}g` },
-              { label: 'Fat',      emoji: '🧈', color: theme.supplement,
-                consumed: consumedWithQuick.fat,      target: MACRO_TARGETS.fat,
-                valueStr: `${consumedWithQuick.fat}g`, targetStr: `${MACRO_TARGETS.fat}g` },
+                consumed: consumedWithQuick.carbs,    target: macroTargets.carbs,
+                valueStr: `${consumedWithQuick.carbs}g`, targetStr: `${macroTargets.carbs}g` },
+              { label: 'Fat',      emoji: '🥑', color: theme.supplement,
+                consumed: consumedWithQuick.fat,      target: macroTargets.fat,
+                valueStr: `${consumedWithQuick.fat}g`, targetStr: `${macroTargets.fat}g` },
             ].map((item, idx, arr) => {
               const pct = Math.min((item.consumed / item.target) * 100, 100);
               const isLast = idx === arr.length - 1;
@@ -563,18 +665,21 @@ export default function HomeScreen() {
           const targetL  = (MACRO_TARGETS.water / 1000).toFixed(1);
           const isGoalMet = quickWaterMl >= MACRO_TARGETS.water;
           return (
-            <View style={s.hydrationCard}>
+            <View
+              onLayout={e => { hydrationCardY.current = e.nativeEvent.layout.y; }}
+              style={[s.hydrationCard, hydrationHighlight && { borderWidth: 1.5, borderColor: theme.secondary }]}
+            >
               {/* Header */}
               <View style={s.hydrationHeader}>
                 <Text style={s.hydrationTitle}>💧 Hydration</Text>
-                <Text style={[s.hydrationAmount, { color: isGoalMet ? '#22c55e' : theme.secondary }]}>
+                <Text style={[s.hydrationAmount, { color: isGoalMet ? theme.success : theme.secondary }]}>
                   {waterL}L <Text style={s.hydrationTarget}>/ {targetL}L</Text>
                 </Text>
               </View>
 
               {/* Fill bar */}
               <View style={s.hydrationBarBg}>
-                <View style={[s.hydrationBarFill, { width: `${waterPct * 100}%` as any, backgroundColor: isGoalMet ? '#22c55e' : theme.secondary }]} />
+                <View style={[s.hydrationBarFill, { width: `${waterPct * 100}%` as any, backgroundColor: isGoalMet ? theme.success : theme.secondary }]} />
               </View>
 
               {/* Quick-tap pills */}
@@ -641,15 +746,15 @@ export default function HomeScreen() {
             </View>
           )}
           {done + skipped === total && total > 0 && skipped > 0 && done < total && (
-            <View style={[s.allDone, { borderColor: '#f59e0b44', backgroundColor: '#f59e0b18' }]}>
-              <Text style={[s.allDoneText, { color: '#d97706' }]}>
+            <View style={[s.allDone, { borderColor: theme.supplement + '44', backgroundColor: theme.supplement + '18' }]}>
+              <Text style={[s.allDoneText, { color: theme.supplement }]}>
                 ✅ Day wrapped up — {done} done, {skipped} skipped
               </Text>
             </View>
           )}
 
           <View style={s.timeline}>
-            {selectedDay.events.map((event, idx) => (
+            {mergedEvents.map((event, idx) => (
               <View
                 key={`${selectedDayId}-${idx}`}
                 ref={el => { itemViewRefs.current[idx] = el as any; }}
@@ -659,8 +764,18 @@ export default function HomeScreen() {
                   done={checkedEvents.has(idx)}
                   skipped={skippedEvents.has(idx)}
                   isLast={idx === total - 1}
-                  onToggle={() => toggleEvent(idx)}
+                  onToggle={event.type === 'plan-review'
+                    ? () => { setPlanReviewEventIdx(idx); setPlanReviewOpen(true); }
+                    : () => toggleEvent(idx)}
                   onSkip={() => toggleSkip(idx)}
+                  onLogSets={event.type === 'gym'
+                    ? () => setLogSheetFocus(event.workoutFocus ?? event.label)
+                    : undefined}
+                  onChangeFocus={event.type === 'gym'
+                    ? (focus) => setDayWorkoutFocus(selectedDayIndex, focus)
+                    : undefined}
+                  sessionSummary={event.type === 'gym' ? sessionSummary : undefined}
+                  otherDayFocuses={event.type === 'gym' ? otherDayFocuses : undefined}
                 />
               </View>
             ))}
@@ -670,6 +785,28 @@ export default function HomeScreen() {
         <View style={s.bottomPad} />
       </ScrollView>
       <Confetti visible={showConfetti} />
+
+      <PlanReviewSheet
+        visible={planReviewOpen}
+        onClose={() => setPlanReviewOpen(false)}
+        onApproved={() => {
+          setPlanReviewOpen(false);
+          if (planReviewEventIdx !== null) toggleEvent(planReviewEventIdx);
+        }}
+      />
+
+      <WorkoutLogSheet
+        visible={!!logSheetFocus}
+        focus={logSheetFocus ?? ''}
+        onClose={() => setLogSheetFocus(null)}
+        onSaved={refreshSessionSummary}
+        onCompleteGymEvent={() => {
+          const gymEventIdx = selectedDay.events.findIndex(e => e.type === 'gym');
+          if (gymEventIdx !== -1 && !checkedEvents.has(gymEventIdx)) {
+            toggleEvent(gymEventIdx);
+          }
+        }}
+      />
 
 
       {/* ── Log Bottom Sheet ── */}
@@ -692,7 +829,6 @@ export default function HomeScreen() {
                   { key: 'log-meal',    emoji: '🍽️', label: 'Log meal',         sub: 'Enter name, kcal & protein',      color: theme.meal },
                   { key: 'scan',        emoji: '📷', label: 'Scan barcode',      sub: 'Packaged food & drinks',          color: theme.meal },
                   { key: 'photo',       emoji: '📸', label: 'AI food scan',      sub: 'Point camera at your plate',      color: theme.meal },
-                  { key: 'log-water',   emoji: '💧', label: 'Log water',         sub: 'Track your daily hydration',      color: theme.secondary },
                   { key: 'log-workout', emoji: '🏋️', label: 'Log workout',       sub: "Mark today's session done",       color: theme.gym },
                 ].map(({ key, emoji, label, sub, color }) => (
                   <TouchableOpacity
@@ -710,8 +846,8 @@ export default function HomeScreen() {
                       } else if (key === 'log-workout') {
                         logQuickWorkout();
                         setQuickLogOpen(null);
-                      } else {
-                        setQuickLogOpen(key as any);
+                      } else if (key === 'log-meal') {
+                        setQuickLogOpen(key);
                       }
                     }}>
                     <View style={[s.sheetRowIcon, { backgroundColor: color + '18' }]}>
@@ -768,52 +904,6 @@ export default function HomeScreen() {
               </>
             )}
 
-            {quickLogOpen === 'log-water' && (
-              <>
-                <TouchableOpacity onPress={() => setQuickLogOpen('menu')} style={s.sheetBack}>
-                  <Text style={[s.sheetBackText, { color: theme.primary }]}>‹ Back</Text>
-                </TouchableOpacity>
-                <Text style={[s.sheetTitle, { color: theme.textPrimary }]}>Log water</Text>
-
-                <Text style={[s.waterSheetLabel, { color: theme.textMuted }]}>Add</Text>
-                <View style={s.waterPillRow}>
-                  {[250, 500, 750, 1000].map(ml => (
-                    <TouchableOpacity
-                      key={ml}
-                      style={[s.waterPill, { backgroundColor: theme.bgCardAlt, borderColor: theme.border }]}
-                      onPress={() => { addQuickWater(ml); setQuickLogOpen(null); }}
-                      activeOpacity={0.7}>
-                      <Text style={[s.waterPillText, { color: theme.secondary }]}>{ml < 1000 ? `${ml}ml` : '1L'}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={[s.waterSheetLabel, { color: theme.textMuted }]}>Remove</Text>
-                <View style={s.waterPillRow}>
-                  {[250, 500, 750, 1000].map(ml => (
-                    <TouchableOpacity
-                      key={ml}
-                      style={[s.waterPill, { backgroundColor: theme.bgCardAlt, borderColor: theme.border }]}
-                      onPress={() => { addQuickWater(-ml); setQuickLogOpen(null); }}
-                      activeOpacity={0.7}
-                      disabled={quickWaterMl === 0}>
-                      <Text style={[s.waterPillText, { color: quickWaterMl === 0 ? theme.textMuted : theme.supplement }]}>−{ml < 1000 ? `${ml}ml` : '1L'}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <View style={s.waterTotalRow}>
-                  <Text style={[s.waterTotal, { color: theme.textMuted }]}>
-                    {(quickWaterMl / 1000).toFixed(1)}L logged today
-                  </Text>
-                  {quickWaterMl > 0 && (
-                    <TouchableOpacity onPress={() => { addQuickWater(-quickWaterMl); setQuickLogOpen(null); }} activeOpacity={0.7}>
-                      <Text style={[s.waterResetBtn, { color: theme.supplement }]}>Reset</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </>
-            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -881,19 +971,21 @@ export default function HomeScreen() {
         <Animated.View
           pointerEvents="none"
           style={{
-            position: 'absolute', bottom: 100, left: 24, right: 24,
+            position: 'absolute', top: insets.top + 8,
+            alignSelf: 'center',
+            maxWidth: 300,
             backgroundColor: theme.bgCard,
-            borderRadius: 16,
-            paddingHorizontal: 18, paddingVertical: 13,
+            borderRadius: 20,
+            paddingHorizontal: 18, paddingVertical: 11,
             borderWidth: 1, borderColor: theme.border,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.18, shadowRadius: 12, elevation: 8,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.14, shadowRadius: 16, elevation: 10,
             opacity: toastAnim,
-            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }],
           }}
         >
-          <Text style={{ fontSize: 14, fontWeight: '700', color: theme.textPrimary, marginBottom: 2 }}>{toastMsg.line1}</Text>
-          <Text style={{ fontSize: 13, color: theme.textSecondary }}>{toastMsg.line2}</Text>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: theme.textPrimary, marginBottom: 2, textAlign: 'center' }}>{toastMsg.line1}</Text>
+          <Text style={{ fontSize: 12, color: theme.textSecondary, textAlign: 'center' }}>{toastMsg.line2}</Text>
         </Animated.View>
       )}
     </SafeAreaView>

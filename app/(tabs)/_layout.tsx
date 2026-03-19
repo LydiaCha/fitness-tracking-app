@@ -63,7 +63,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Today',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="sun.max.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -82,10 +82,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="plan"
+        name="week"
         options={{
-          title: 'Plan',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="calendar" color={color} />,
+          title: 'Week',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar.circle.fill" color={color} />,
         }}
       />
       <Tabs.Screen

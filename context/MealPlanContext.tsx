@@ -38,11 +38,27 @@ import {
   UserDietaryProfile,
   GoalTag,
 } from '@/types/meal';
-import { UserProfile, loadUserProfile } from '@/constants/userProfile';
+import { UserProfile, loadUserProfile, getEffectiveMacros } from '@/constants/userProfile';
+import { computeDayLoad, dayLoadToPromptString } from '@/utils/dayLoad';
 
 // ─── Storage key ──────────────────────────────────────────────────────────────
 
 const PLAN_STORAGE_KEY = STORAGE_KEYS.AI_MEALS;
+
+// ─── Plan fingerprint ─────────────────────────────────────────────────────────
+
+/**
+ * A short string representing the profile fields that affect plan correctness.
+ * If this changes after a plan was generated, the plan is considered stale.
+ * Only dietary restrictions and fitness goal matter for correctness — macro
+ * drift has its own alert in My Health and doesn't make meals unsafe.
+ */
+function makePlanFingerprint(profile: UserProfile): string {
+  const restrictions = [...(profile.dietaryRestrictions ?? [])].sort().join('|');
+  const disliked     = [...(profile.dislikedIngredientIds ?? [])].sort().join('|');
+  const gymDays      = [...(profile.gymDays ?? [])].sort((a, b) => a - b).join(',');
+  return `${restrictions}:${profile.fitnessGoal}:${disliked}:${gymDays}`;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +70,8 @@ export interface MealPlanState {
   progress:        number;
   error:           string | null;
   lastGeneratedAt: string | null;   // ISO date string
+  /** True when dietary restrictions or fitness goal changed since last generation */
+  planIsStale:     boolean;
   /** How many ingredients appear in 2+ meals this week */
   reuseStats: {
     totalUniqueIngredients: number;
@@ -98,18 +116,22 @@ function buildWeeklyPlanPrompt(params: {
   slotCandidates: SlotCandidate[];
   goalTags:       GoalTag[];
   lastWeekMealIds?: string[];
+  dayLoadStr?:    string;
 }): { systemPrompt: string; userMessage: string } {
-  const { userProfile, slotCandidates, goalTags, lastWeekMealIds } = params;
+  const { userProfile, slotCandidates, goalTags, lastWeekMealIds, dayLoadStr } = params;
 
   const systemPrompt = `You are a meal planning assistant for a fitness app.
 You will receive 28 meal slots for a full week, each with 5 pre-scored candidate meals.
 Your task: select the best meal for every slot.
 
-RULES:
-- Select ONLY from the candidates listed for each slot. Never invent meals.
+HARD CONSTRAINTS (non-negotiable):
+- Select ONLY from the candidates listed for each slot. Never invent meals or use meal IDs not shown.
+- Every candidate is already pre-filtered for dietary restrictions, disliked ingredients, and prep time — you can safely select any candidate listed.
+
+PREFERENCES (optimise for, balanced against each other):
 - Prioritise ingredient reuse across the week to minimise grocery items.
 - Ensure variety — avoid the same meal appearing on consecutive days unless repeatTolerance is "daily".
-- Balance macros throughout each day (don't put two high-carb meals on the same day if avoidable).
+- Balance macros throughout each day — avoid two high-carb meals on the same day.
 - Match meal weight to slot type (snacks should be light, dinners satisfying).
 
 Respond ONLY with a JSON array. No explanation. No markdown. Just the array:
@@ -132,8 +154,9 @@ Only adjust if the standard serving is clearly far from the slot's calorie targe
     return `Slot ${slotIndex} — ${day} ${type} (target: ${slot.targetCalories}kcal, ${slot.targetProtein}gP)\n${cands}`;
   }).join('\n\n');
 
+  // Use meal names in the avoid list so Claude can reason about variety, not just opaque IDs
   const lastWeekSection = lastWeekMealIds && lastWeekMealIds.length > 0
-    ? `\nLast week's meals (avoid repeating where possible): ${[...new Set(lastWeekMealIds)].join(', ')}\n`
+    ? `\nLast week's meals (avoid repeating where possible): ${[...new Set(lastWeekMealIds)].map(id => getMeal(id)?.name ?? id).join(', ')}\n`
     : '';
 
   const restrictionText = userProfile.dietaryRestrictions?.length > 0
@@ -142,13 +165,15 @@ Only adjust if the standard serving is clearly far from the slot's calorie targe
   const cuisineText = userProfile.cuisinePreferences?.length > 0
     ? `Preferred cuisines: ${userProfile.cuisinePreferences.join(', ')}\n`
     : '';
-  const prepText = `Max prep: ${userProfile.maxPrepMins ?? 30} min`;
+  const prepText = `Max prep: ${userProfile.maxPrepMins ?? 30} min (candidates are pre-filtered — every listed meal is within this limit)`;
+
+  const dayLoadSection = dayLoadStr ? `Training load: ${dayLoadStr}\n` : '';
 
   const userMessage = `User: ${userProfile.age}yo ${userProfile.gender}, ${userProfile.weightKg}kg
 Goals: ${goalTags.join(', ')}
-Daily targets: ${userProfile.calories} kcal · ${userProfile.protein}g P · ${userProfile.carbs}g C · ${userProfile.fat}g F
-Dietary restrictions: ${restrictionText}
-${cuisineText}${prepText}${lastWeekSection}
+Daily targets: ${getEffectiveMacros(userProfile).calories} kcal · ${getEffectiveMacros(userProfile).protein}g P · ${getEffectiveMacros(userProfile).carbs}g C · ${getEffectiveMacros(userProfile).fat}g F
+Dietary restrictions: ${restrictionText} (all candidates pre-filtered — assume every listed meal is safe)
+${cuisineText}${prepText}${dayLoadSection}${lastWeekSection}
 ${slotLines}`;
 
   return { systemPrompt, userMessage };
@@ -175,6 +200,7 @@ function toDietaryProfile(
     dislikedIngredientIds: userProfile.dislikedIngredientIds ?? [],
     goals:                 fitnessGoalToTags(userProfile.fitnessGoal),
     maxPrepMins:           userProfile.maxPrepMins ?? 30,
+    cuisinePreferences:    userProfile.cuisinePreferences ?? [],
     recentMealIds,
   };
 }
@@ -182,8 +208,9 @@ function toDietaryProfile(
 // ─── Persisted shape ──────────────────────────────────────────────────────────
 
 interface PersistedPlan {
-  weeklyPlan:      MealPlanEntry[];
-  lastGeneratedAt: string;
+  weeklyPlan:         MealPlanEntry[];
+  lastGeneratedAt:    string;
+  profileFingerprint?: string;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -198,6 +225,7 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
     progress:         0,
     error:            null,
     lastGeneratedAt:  null,
+    planIsStale:      false,
     reuseStats:       null,
     nextWeekPlan:     [],
     nextGroceryList:  [],
@@ -218,12 +246,17 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
       if (persisted.weeklyPlan.length > 0) {
         const groceryList  = buildPlanGroceryList(persisted.weeklyPlan);
         const reuseStats   = getIngredientReuseStats(persisted.weeklyPlan);
+        // Check if profile has drifted from what the plan was generated with
+        const currentProfile = await loadUserProfile();
+        const planIsStale = persisted.profileFingerprint !== undefined &&
+          persisted.profileFingerprint !== makePlanFingerprint(currentProfile);
         setState(s => ({
           ...s,
           weeklyPlan:      persisted.weeklyPlan,
           groceryList,
           reuseStats,
           lastGeneratedAt: persisted.lastGeneratedAt ?? null,
+          planIsStale,
         }));
       }
 
@@ -266,7 +299,8 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
     onAuthError:   (msg: string) => void,
     avoidMealIds:  string[] = [],
   ): Promise<MealPlanEntry[]> => {
-    const dailyTargets   = { calories: userProfile.calories, protein: userProfile.protein };
+    const { calories, protein } = getEffectiveMacros(userProfile);
+    const dailyTargets   = { calories, protein };
     const slots          = buildWeekSlots(dailyTargets);
     const goalTags       = fitnessGoalToTags(userProfile.fitnessGoal);
     const dietaryProfile = toDietaryProfile(userProfile, avoidMealIds);
@@ -275,11 +309,24 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
       .map(id => getMeal(id))
       .filter((m): m is MealRecord => m !== undefined);
 
-    const slotCandidates: SlotCandidate[] = slots.map((slot, slotIndex) => {
+    // Score slots sequentially, accumulating the top pick from each slot as same-day
+    // context for the next. This is a heuristic (Claude may pick differently), but it
+    // primes variety scoring so we don't surface two high-carb meals in the same day.
+    const slotCandidates: SlotCandidate[] = [];
+    let sameDayAccumulated: MealRecord[] = [];
+    let lastScoredDay = -1;
+
+    for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+      const slot = slots[slotIndex];
+      if (slot.day !== lastScoredDay) {
+        sameDayAccumulated = [];
+        lastScoredDay = slot.day;
+      }
       const candidates = filterMeals(slot, dietaryProfile);
-      // Pass [] for already-planned (unknown upfront) and avoidMealIds for cross-week penalty
-      const scored     = scoreMeals(candidates, slot, [], avoidMealIds, dietaryProfile);
-      return {
+      const scored     = scoreMeals(candidates, slot, sameDayAccumulated, avoidMealIds, dietaryProfile);
+      const topMeal    = scored[0]?.meal;
+      if (topMeal) sameDayAccumulated.push(topMeal);
+      slotCandidates.push({
         slotIndex,
         slot,
         candidates: scored.slice(0, 5).map(sc => ({
@@ -289,16 +336,19 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
           calories: sc.meal.calories,
           protein:  sc.meal.protein,
         })),
-      };
-    });
+      });
+    }
 
     onProgress(1);
+
+    const dayLoad    = await computeDayLoad(userProfile.gymDays);
+    const dayLoadStr = dayLoadToPromptString(dayLoad);
 
     type ClaudeSelection = { slotIndex: number; mealId: string; portionMultiplier: number };
     let claudeSelections: ClaudeSelection[] = [];
 
     try {
-      const { systemPrompt, userMessage } = buildWeeklyPlanPrompt({ userProfile, slotCandidates, goalTags, lastWeekMealIds: avoidMealIds });
+      const { systemPrompt, userMessage } = buildWeeklyPlanPrompt({ userProfile, slotCandidates, goalTags, lastWeekMealIds: avoidMealIds, dayLoadStr });
       const raw    = await callClaude({ systemPrompt, userMessage, maxTokens: 1500 });
       const parsed = extractJSON<ClaudeSelection[]>(raw);
       if (parsed && Array.isArray(parsed) && parsed.length > 0) {
@@ -362,7 +412,11 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
       const reuseStats  = getIngredientReuseStats(confirmedEntries);
       const now         = new Date().toISOString();
 
-      await safeSetItem(PLAN_STORAGE_KEY, JSON.stringify({ weeklyPlan: confirmedEntries, lastGeneratedAt: now }));
+      await safeSetItem(PLAN_STORAGE_KEY, JSON.stringify({
+        weeklyPlan:         confirmedEntries,
+        lastGeneratedAt:    now,
+        profileFingerprint: makePlanFingerprint(userProfile),
+      }));
       // Invalidate next-week plan so it regenerates with the new this-week plan as avoidance
       await safeRemoveItem(STORAGE_KEYS.AI_MEALS_NEXT_WEEK);
 
@@ -372,6 +426,7 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
         groceryList,
         reuseStats,
         isGenerating:    false,
+        planIsStale:     false,
         progress:        28,
         lastGeneratedAt: now,
         error: s.error?.includes('API key') ? s.error : null,
@@ -434,6 +489,7 @@ export function MealPlanProvider({ children }: { children: React.ReactNode }) {
       progress:         0,
       error:            null,
       lastGeneratedAt:  null,
+      planIsStale:      false,
       reuseStats:       null,
       nextWeekPlan:     [],
       nextGroceryList:  [],

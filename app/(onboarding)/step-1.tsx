@@ -9,7 +9,7 @@ import { AppThemeType } from '@/constants/theme';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useAuth } from '@/context/AuthContext';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 7;
 
 export default function Step1() {
   const { theme } = useAppTheme();
@@ -101,7 +101,7 @@ const styles = (theme: AppThemeType) => StyleSheet.create({
     gap: 12,
   },
   emoji:   { fontSize: 48 },
-  heading: { fontSize: 28, fontWeight: '700', color: theme.textPrimary },
+  heading: { fontSize: 26, fontWeight: '700', color: theme.textPrimary },
   sub:     { fontSize: 16, color: theme.textMuted, lineHeight: 22 },
   input: {
     backgroundColor: theme.bgCard,

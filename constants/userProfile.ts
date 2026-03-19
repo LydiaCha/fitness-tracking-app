@@ -12,11 +12,54 @@ export interface DaySchedule {
 const WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 const DEFAULT_WORK_DAYS = [1, 2, 3, 4]; // Mon–Thu
 
-export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
-export type FitnessGoal   = 'lose' | 'maintain' | 'gain';
-export type Gender        = 'female' | 'male' | 'other';
+export type ActivityLevel      = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+export type FitnessGoal        = 'lose' | 'maintain' | 'gain';
+export type Gender             = 'female' | 'male' | 'other';
+export type DietaryRestriction = 'gluten-free' | 'dairy-free' | 'vegetarian' | 'vegan' | 'nut-free';
+export type CuisinePreference  = 'asian' | 'mediterranean' | 'mexican' | 'american' | 'middle-eastern';
+export type FitnessLevel       = 'beginner' | 'intermediate' | 'advanced';
+export type TrainingEquipment  = 'gym' | 'home' | 'both';
+
+export const RESTRICTION_OPTIONS: Array<{ value: DietaryRestriction; emoji: string; label: string }> = [
+  { value: 'gluten-free',  emoji: '🌾', label: 'Gluten-free' },
+  { value: 'dairy-free',   emoji: '🥛', label: 'Dairy-free' },
+  { value: 'vegetarian',   emoji: '🥦', label: 'Vegetarian' },
+  { value: 'vegan',        emoji: '🌱', label: 'Vegan' },
+  { value: 'nut-free',     emoji: '🥜', label: 'Nut-free' },
+];
+
+export const CUISINE_OPTIONS: Array<{ value: CuisinePreference; emoji: string; label: string }> = [
+  { value: 'asian',          emoji: '🍜', label: 'Asian' },
+  { value: 'mediterranean',  emoji: '🫒', label: 'Mediterranean' },
+  { value: 'mexican',        emoji: '🌮', label: 'Mexican' },
+  { value: 'american',       emoji: '🍔', label: 'American' },
+  { value: 'middle-eastern', emoji: '🥙', label: 'Middle Eastern' },
+];
+
+export const PREP_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 15, label: '15 min' },
+  { value: 30, label: '30 min' },
+  { value: 45, label: '45 min' },
+  { value: 60, label: '60+ min' },
+];
+
+/** Toggle a dietary restriction with vegan ↔ vegetarian sync rules. */
+export function toggleDietaryRestriction(
+  cur: DietaryRestriction[],
+  restriction: DietaryRestriction,
+): DietaryRestriction[] {
+  if (cur.includes(restriction)) {
+    const next = cur.filter(r => r !== restriction);
+    return restriction === 'vegetarian' ? next.filter(r => r !== 'vegan') : next;
+  }
+  const next = [...cur, restriction];
+  return restriction === 'vegan' && !next.includes('vegetarian') ? [...next, 'vegetarian'] : next;
+}
 
 export interface UserProfile {
+  /** Incremented when a breaking schema change requires a migration in loadUserProfile(). */
+  profileSchemaVersion: number;
+
   name:          string;
   weekSchedule:  DaySchedule[];   // index 0=Sun … 6=Sat
   gymDays:       number[];
@@ -26,10 +69,29 @@ export interface UserProfile {
   weightKg:      number;
   activityLevel: ActivityLevel;
   fitnessGoal:   FitnessGoal;
-  calories:      number;
-  protein:       number;
-  carbs:         number;
-  fat:           number;
+
+  /**
+   * Macro targets.
+   * null = derive from calcMacroTargets() automatically.
+   * number = user has explicitly set this value — respected as-is.
+   * Always read through getEffectiveMacros() rather than directly.
+   */
+  caloriesTarget: number | null;
+  proteinTarget:  number | null;
+  carbsTarget:    number | null;
+  fatTarget:      number | null;
+
+  // Dietary preferences (fed into AI meal planning)
+  dietaryRestrictions:   DietaryRestriction[];
+  cuisinePreferences:    CuisinePreference[];   // empty = no preference = all cuisines
+  dislikedIngredientIds: string[];
+  maxPrepMins:           number;
+  // Training setup — used by AI workout generation
+  fitnessLevel: FitnessLevel;
+  equipment:    TrainingEquipment;
+
+  // Supplement reminders in Today's schedule
+  supplementsEnabled:    boolean;
 }
 
 const DEFAULT_DAY: DaySchedule = {
@@ -48,6 +110,7 @@ function makeDefaultWeek(): DaySchedule[] {
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
+  profileSchemaVersion: 3,
   name:          '',
   weekSchedule:  makeDefaultWeek(),
   gymDays:       [1, 2, 3, 4, 6],
@@ -57,16 +120,35 @@ export const DEFAULT_PROFILE: UserProfile = {
   weightKg:      65,
   activityLevel: 'moderate',
   fitnessGoal:   'maintain',
-  calories:      1900,
-  protein:       145,
-  carbs:         200,
-  fat:           65,
+  caloriesTarget: null,
+  proteinTarget:  null,
+  carbsTarget:    null,
+  fatTarget:      null,
+  dietaryRestrictions:   [],
+  cuisinePreferences:    [],
+  dislikedIngredientIds: [],
+  maxPrepMins:           30,
+  fitnessLevel:          'intermediate',
+  equipment:             'gym',
+  supplementsEnabled:    true,
 };
 
 const PROFILE_KEY = STORAGE_KEYS.PROFILE;
 
 export const DAY_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+export const FITNESS_LEVEL_OPTIONS: Array<{ value: FitnessLevel; label: string; desc: string }> = [
+  { value: 'beginner',     label: 'Beginner',     desc: 'New to structured training' },
+  { value: 'intermediate', label: 'Intermediate', desc: '1–3 years consistent training' },
+  { value: 'advanced',     label: 'Advanced',     desc: '3+ years, progressive overload' },
+];
+
+export const EQUIPMENT_OPTIONS: Array<{ value: TrainingEquipment; label: string; desc: string }> = [
+  { value: 'gym',  label: 'Gym',       desc: 'Full equipment access' },
+  { value: 'home', label: 'Home',      desc: 'Bodyweight & dumbbells' },
+  { value: 'both', label: 'Both',      desc: 'Gym most days, home occasionally' },
+];
 
 export const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
   sedentary:   'Desk only',
@@ -112,25 +194,61 @@ export function calcMacroTargets(
   return { calories, protein, carbs, fat };
 }
 
+/**
+ * Returns the resolved macro targets for a profile.
+ * null target → formula-computed value. number target → user override.
+ * Always use this instead of reading caloriesTarget etc. directly.
+ */
+export function getEffectiveMacros(
+  profile: Pick<UserProfile, 'caloriesTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget' | 'age' | 'gender' | 'weightKg' | 'heightCm' | 'activityLevel' | 'fitnessGoal'>,
+): { calories: number; protein: number; carbs: number; fat: number } {
+  const computed = calcMacroTargets(profile);
+  return {
+    calories: profile.caloriesTarget ?? computed.calories,
+    protein:  profile.proteinTarget  ?? computed.protein,
+    carbs:    profile.carbsTarget    ?? computed.carbs,
+    fat:      profile.fatTarget      ?? computed.fat,
+  };
+}
+
 export async function loadUserProfile(): Promise<UserProfile> {
   const raw = await safeGetItem(PROFILE_KEY);
-  const saved = safeParseJSON<Partial<UserProfile> & Record<string, unknown>>(raw, {});
+  // Use a loose type so we can read old-schema fields during migration
+  const saved = safeParseJSON<Record<string, unknown>>(raw, {});
+
   if (Object.keys(saved).length === 0) return { ...DEFAULT_PROFILE };
 
-  // Migrate old flat format (sleepTime/wakeTime/workStart/workEnd) → weekSchedule
-  if (!saved.weekSchedule) {
-    const base: DaySchedule = {
-      sleepTime: (saved.sleepTime as string) ?? DEFAULT_DAY.sleepTime,
-      wakeTime:  (saved.wakeTime  as string) ?? DEFAULT_DAY.wakeTime,
-      workStart: (saved.workStart as string) ?? DEFAULT_DAY.workStart,
-      workEnd:   (saved.workEnd   as string) ?? DEFAULT_DAY.workEnd,
-      isWorkDay: true,
-    };
-    saved.weekSchedule = WEEK_DAYS.map(d => ({
-      ...base, isWorkDay: DEFAULT_WORK_DAYS.includes(d),
-    }));
+  // Migrations run in version order. Each bumps profileSchemaVersion and
+  // falls through to later migrations so a v1 profile gets all fixes in one load.
+  const version = (saved.profileSchemaVersion as number | undefined) ?? 1;
+
+  // ── v2: replace flat macro fields with nullable *Target fields ────────────
+  if (version < 2) {
+    saved.caloriesTarget = null;
+    saved.proteinTarget  = null;
+    saved.carbsTarget    = null;
+    saved.fatTarget      = null;
+    saved.profileSchemaVersion = 2;
+    delete saved.calories;
+    delete saved.protein;
+    delete saved.carbs;
+    delete saved.fat;
   }
-  return { ...DEFAULT_PROFILE, ...saved };
+
+  // ── v3: add fitnessLevel + equipment with safe defaults ───────────────────
+  if (version < 3) {
+    if (!saved.fitnessLevel) saved.fitnessLevel = 'intermediate';
+    if (!saved.equipment)    saved.equipment    = 'gym';
+    saved.profileSchemaVersion = 3;
+  }
+
+  if (version < 3) {
+    const migrated = { ...DEFAULT_PROFILE, ...saved };
+    await safeSetItem(PROFILE_KEY, JSON.stringify(migrated));
+    return migrated;
+  }
+
+  return { ...DEFAULT_PROFILE, ...saved } as UserProfile;
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
@@ -139,7 +257,17 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
 
 export function gymDayLabel(gymDays: number[]): string {
   if (gymDays.length === 0) return 'None';
-  return gymDays.map(d => DAY_NAMES[d]).join(' · ');
+  if (gymDays.length === 7) return 'Every day';
+  const s = [...gymDays].sort((a, b) => a - b);
+  // Mon–Fri
+  if (s.length === 5 && s[0] === 1 && s[4] === 5 && s.every((d, i) => d === i + 1)) return 'Mon–Fri';
+  // Weekends
+  if (s.length === 2 && s[0] === 0 && s[1] === 6) return 'Weekends';
+  // Mon–Sat
+  if (s.length === 6 && s[0] === 1 && s[5] === 6 && s.every((d, i) => d === i + 1)) return 'Mon–Sat';
+  // Weekdays + Sat
+  if (s.length === 6 && s[0] === 0 && s[5] === 5) return 'Sun–Fri';
+  return s.map(d => DAY_NAMES[d]).join(' ');
 }
 
 export function buildAISystemPrompt(profile: UserProfile): string {
@@ -160,6 +288,6 @@ export function buildAISystemPrompt(profile: UserProfile): string {
 - Weekly schedule:\n${scheduleLines}
 - Gym days: ${gymDayLabel(profile.gymDays)}
 - Rest days: ${restDays}
-- Daily macro targets: ${profile.calories} kcal · ${profile.protein}g protein · ${profile.carbs}g carbs · ${profile.fat}g fat
+- Daily macro targets: ${getEffectiveMacros(profile).calories} kcal · ${getEffectiveMacros(profile).protein}g protein · ${getEffectiveMacros(profile).carbs}g carbs · ${getEffectiveMacros(profile).fat}g fat
 - Practical constraints: batch cooks on rest days, eats at unusual hours, needs portable/desk-friendly options, high-protein focus`;
 }

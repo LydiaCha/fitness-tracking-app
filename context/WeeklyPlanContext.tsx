@@ -20,10 +20,10 @@ import { WEEK_SCHEDULE, DaySchedule, ScheduleEvent } from '@/constants/scheduleD
 import { getMeal } from '@/constants/mealDatabase';
 import { MealPlanEntry, MEAL_ORDER } from '@/types/meal';
 import { useMealPlan } from '@/context/MealPlanContext';
-import { callClaude, extractJSON, ClaudeApiError } from '@/utils/claudeApi';
+import { useWorkoutPlan, buildWorkoutContent } from '@/context/WorkoutPlanContext';
 import { safeGetItem, safeSetItem, safeParseJSON } from '@/utils/storage';
 import { STORAGE_KEYS } from '@/utils/appConstants';
-import { loadUserProfile, UserProfile, DAY_NAMES, DEFAULT_PROFILE } from '@/constants/userProfile';
+import { loadUserProfile, UserProfile, DEFAULT_PROFILE } from '@/constants/userProfile';
 import { generateScheduleSkeleton } from '@/utils/scheduleBuilder';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,6 +86,71 @@ function buildPrepDetail(mealEntries: MealPlanEntry[]): string {
 
   lines.push('Anything appearing ×2 or more is worth batch cooking on Sunday!');
   return lines.join('\n').trim();
+}
+
+// ─── Persisted-overlay hydration ─────────────────────────────────────────────
+
+/**
+ * Rebuilds a DaySchedule[] by applying a FRESH skeleton (updated event times,
+ * supplements, etc.) while preserving the MEAL CHOICES from a previously
+ * persisted overlay. This ensures user meal swaps survive app restarts.
+ *
+ * Non-meal events always come from the fresh skeleton so schedule changes
+ * (sleep time, gym days) take effect immediately.
+ */
+function rebuildFromPersistedOverlay(
+  persistedOverlay: DaySchedule[],
+  workoutFocuses:   Record<string, string>,
+  skeleton:         DaySchedule[],
+): DaySchedule[] {
+  return skeleton.map((skeletonDay, dayIndex) => {
+    const persistedDay = persistedOverlay[dayIndex];
+    if (!persistedDay) return skeletonDay;
+
+    // Meal events from the persisted overlay, in slot order
+    const persistedMeals = persistedDay.events.filter(e => e.type === 'meal');
+
+    // Slot indices (positions of meal-type events) in the fresh skeleton
+    const mealSlotIndices = skeletonDay.events
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.type === 'meal')
+      .map(({ i }) => i);
+
+    const newEvents: ScheduleEvent[] = [...skeletonDay.events];
+    mealSlotIndices.forEach((eventIdx, pos) => {
+      const src = persistedMeals[pos];
+      if (!src?.recipeId) return;
+      newEvents[eventIdx] = {
+        ...skeletonDay.events[eventIdx],   // keep skeleton label, time, type
+        recipeId:   src.recipeId,
+        recipeType: src.recipeType,
+        macros:     src.macros,
+        ...(src.detail ? { detail: src.detail } : {}),
+      };
+    });
+
+    // Preserve the meal-prep detail on Sunday (day 6)
+    if (dayIndex === 6) {
+      const skeletonPrepIdx = newEvents.findIndex(
+        e => e.type === 'prep' && e.label === 'Meal prep for the week',
+      );
+      if (skeletonPrepIdx !== -1) {
+        const persistedPrep = persistedDay.events.find(
+          e => e.type === 'prep' && e.label === 'Meal prep for the week',
+        );
+        if (persistedPrep?.detail) {
+          newEvents[skeletonPrepIdx] = { ...newEvents[skeletonPrepIdx], detail: persistedPrep.detail };
+        }
+      }
+    }
+
+    const focus = workoutFocuses[String(dayIndex)];
+    return {
+      ...skeletonDay,
+      events: newEvents,
+      ...(focus ? { workoutFocus: focus } : {}),
+    };
+  });
 }
 
 // ─── Overlay builder ──────────────────────────────────────────────────────────
@@ -175,33 +240,20 @@ function buildOverlaySchedule(
   });
 }
 
-// ─── Claude prompt for workout focus ─────────────────────────────────────────
-
-function buildWorkoutFocusPrompt(gymDays: number[], goal: string): {
-  systemPrompt: string;
-  userMessage:  string;
-} {
-  const monFirstDays = gymDays
-    .map(jsToMonFirst)
-    .sort((a, b) => a - b);
-
-  const dayNames = monFirstDays
-    .map(d => DAY_NAMES[(d + 1) % 7])  // DAY_NAMES is Sun-first, shift back
-    .join(', ');
-
-  const systemPrompt =
-    `You are a strength coach designing a weekly training split. ` +
-    `Return ONLY a JSON object — no prose, no markdown. ` +
-    `Keys are Mon-first day indices (0=Mon, 1=Tue, … 6=Sun) as strings. ` +
-    `Values are short focus descriptions (e.g. "Upper Push – Chest, Shoulders, Triceps").`;
-
-  const userMessage =
-    `Gym days (Mon-first indices): [${monFirstDays.join(', ')}] (${dayNames})\n` +
-    `Fitness goal: ${goal}\n` +
-    `Assign a balanced Push/Pull/Legs or Upper/Lower split ensuring adequate recovery.\n` +
-    `Example format: { "0": "Upper Push – Chest, Shoulders, Triceps", "1": "Pull – Back, Biceps" }`;
-
-  return { systemPrompt, userMessage };
+/** Converts a WorkoutDay[] from WorkoutPlanContext into the workoutFocuses map
+ *  expected by buildOverlaySchedule (Mon-first day index string → focus string). */
+function workoutDaysToFocuses(
+  workoutDays: Array<{ gymDayIndex: number; split: string; focus: string }>,
+  gymDays:     number[],
+): Record<string, string> {
+  const sortedGymDays = [...gymDays].sort((a, b) => a - b);
+  const focuses: Record<string, string> = {};
+  for (const day of workoutDays) {
+    const jsDay = sortedGymDays[day.gymDayIndex];
+    if (jsDay === undefined) continue;
+    focuses[String(jsToMonFirst(jsDay))] = `${day.split} – ${day.focus}`;
+  }
+  return focuses;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -214,8 +266,10 @@ interface WeeklyPlanState {
 }
 
 interface WeeklyPlanCtx extends WeeklyPlanState {
-  weeklySchedule:      DaySchedule[];
-  generateWeeklyPlan:  (profile?: UserProfile) => Promise<void>;
+  weeklySchedule:       DaySchedule[];
+  generateWeeklyPlan:   (profile?: UserProfile) => Promise<void>;
+  rebuildSkeleton:      (profile: UserProfile) => Promise<void>;
+  setDayWorkoutFocus:   (dayIndex: number, focus: string) => Promise<void>;
 }
 
 // ─── Persisted shape ─────────────────────────────────────────────────────────
@@ -231,6 +285,7 @@ const Ctx = createContext<WeeklyPlanCtx | null>(null);
 
 export function WeeklyPlanProvider({ children }: { children: React.ReactNode }) {
   const { generatePlan: generateMeals } = useMealPlan();
+  const { workoutContent, generateWorkoutPlan } = useWorkoutPlan();
 
   const [state, setState] = useState<WeeklyPlanState>(() => ({
     overlaySchedule: generateScheduleSkeleton(DEFAULT_PROFILE),
@@ -258,7 +313,7 @@ export function WeeklyPlanProvider({ children }: { children: React.ReactNode }) 
         // Stored plan is current. Rebuild on a fresh skeleton so non-AI event
         // details (supplements, gym, wake, etc.) always reflect the latest copy.
         const profile  = await loadUserProfile();
-        const skeleton = generateScheduleSkeleton(profile);
+        const skeleton = generateScheduleSkeleton(profile, workoutContent);
 
         // Recover workout focuses from the persisted overlay
         const workoutFocuses: Record<string, string> = {};
@@ -266,15 +321,13 @@ export function WeeklyPlanProvider({ children }: { children: React.ReactNode }) 
           if (day.workoutFocus) workoutFocuses[String(i)] = day.workoutFocus;
         });
 
-        // Recover meal entries from MealPlanContext's storage key
-        const mealsRaw  = await safeGetItem(STORAGE_KEYS.AI_MEALS);
-        const mealsData = safeParseJSON<{ weeklyPlan: MealPlanEntry[] }>(
-          mealsRaw, { weeklyPlan: [] },
+        // Use the persisted overlay as the meal source — this preserves any
+        // user swaps made during the week without re-reading AI_MEALS.
+        const hasMeals = persisted.overlaySchedule.some(
+          day => day.events.some(e => e.type === 'meal' && e.recipeId),
         );
-        const mealEntries = mealsData.weeklyPlan ?? [];
-
-        const overlay = mealEntries.length > 0
-          ? buildOverlaySchedule(mealEntries, workoutFocuses, skeleton)
+        const overlay = hasMeals
+          ? rebuildFromPersistedOverlay(persisted.overlaySchedule, workoutFocuses, skeleton)
           : skeleton;
 
         setState(s => ({
@@ -285,7 +338,7 @@ export function WeeklyPlanProvider({ children }: { children: React.ReactNode }) 
       } else {
         // New week or first run — show skeleton immediately while generating
         const profile  = await loadUserProfile();
-        const skeleton = generateScheduleSkeleton(profile);
+        const skeleton = generateScheduleSkeleton(profile, workoutContent);
         setState(s => ({ ...s, overlaySchedule: skeleton, weekStartDate: thisMonday }));
         generateWeeklyPlan(profile);
       }
@@ -304,34 +357,18 @@ export function WeeklyPlanProvider({ children }: { children: React.ReactNode }) 
       const userProfile = profile ?? (await loadUserProfile());
       const thisMonday  = getThisWeekMonday();
 
-      // ── Step 1: Build profile-driven skeleton ─────────────────────────────
-      const skeleton = generateScheduleSkeleton(userProfile);
+      // ── Step 1: Generate workouts + meals in parallel (independent) ──────
+      const [generatedWorkouts, mealEntries] = await Promise.all([
+        generateWorkoutPlan(userProfile),
+        generateMeals(userProfile),
+      ]);
 
-      // ── Step 2: Generate meals (delegates to MealPlanContext) ─────────────
-      const mealEntries = await generateMeals(userProfile);
+      // Use freshly generated content directly — avoids stale closure on workoutContent
+      const freshWorkoutContent = buildWorkoutContent(generatedWorkouts);
+      const skeleton = generateScheduleSkeleton(userProfile, freshWorkoutContent);
 
-      // ── Step 3: Generate workout focus per gym day ─────────────────────
-      let workoutFocuses: Record<string, string> = {};
-
-      try {
-        const { systemPrompt, userMessage } = buildWorkoutFocusPrompt(
-          userProfile.gymDays,
-          userProfile.fitnessGoal,
-        );
-        const raw    = await callClaude({ systemPrompt, userMessage, maxTokens: 400 });
-        const parsed = extractJSON<Record<string, string>>(raw);
-        if (parsed && typeof parsed === 'object') {
-          workoutFocuses = parsed;
-        }
-      } catch (err) {
-        // Workout focus is non-critical — fall back to skeleton values
-        if (!(err instanceof ClaudeApiError && err.isAuthError)) {
-          setState(s => ({
-            ...s,
-            error: 'Workout focus unavailable — using defaults.',
-          }));
-        }
-      }
+      // ── Step 2: Derive workout focuses from generated plan ────────────────
+      const workoutFocuses = workoutDaysToFocuses(generatedWorkouts, userProfile.gymDays);
 
       // ── Step 4: Build overlay on top of the skeleton ──────────────────
       if (mealEntries.length === 0) {
@@ -367,10 +404,58 @@ export function WeeklyPlanProvider({ children }: { children: React.ReactNode }) 
     } finally {
       generatingRef.current = false;
     }
-  }, [generateMeals]);
+  }, [generateMeals, generateWorkoutPlan]);
+
+  /**
+   * Rebuilds the schedule skeleton from a new profile without triggering AI calls.
+   * Re-overlays the existing AI-generated meals and workout focuses on top of
+   * the fresh skeleton so profile changes (gym days, sleep times) take effect
+   * immediately without losing the current week's meal plan.
+   */
+  const rebuildSkeleton = useCallback(async (profile: UserProfile) => {
+    const skeleton = generateScheduleSkeleton(profile, workoutContent);
+
+    const planRaw = await safeGetItem(STORAGE_KEYS.WEEKLY_PLAN);
+    const persisted = safeParseJSON<PersistedWeeklyPlan>(
+      planRaw, { weekStartDate: '', overlaySchedule: [] },
+    );
+
+    const workoutFocuses: Record<string, string> = {};
+    persisted.overlaySchedule.forEach((day, i) => {
+      if (day.workoutFocus) workoutFocuses[String(i)] = day.workoutFocus;
+    });
+
+    const hasMeals = persisted.overlaySchedule.some(
+      day => day.events.some(e => e.type === 'meal' && e.recipeId),
+    );
+    const overlay = hasMeals
+      ? rebuildFromPersistedOverlay(persisted.overlaySchedule, workoutFocuses, skeleton)
+      : skeleton;
+
+    const thisMonday = getThisWeekMonday();
+    await safeSetItem(STORAGE_KEYS.WEEKLY_PLAN, JSON.stringify({ weekStartDate: thisMonday, overlaySchedule: overlay }));
+    setState(s => ({ ...s, overlaySchedule: overlay, weekStartDate: thisMonday }));
+  }, [workoutContent]);
+
+  const setDayWorkoutFocus = useCallback(async (dayIndex: number, newFocus: string) => {
+    const updated = state.overlaySchedule.map((day, i) => {
+      if (i !== dayIndex) return day;
+      return {
+        ...day,
+        workoutFocus: newFocus,
+        events: day.events.map(e =>
+          e.type === 'gym' ? { ...e, workoutFocus: newFocus } : e,
+        ),
+      };
+    });
+    setState(s => ({ ...s, overlaySchedule: updated }));
+    const raw       = await safeGetItem(STORAGE_KEYS.WEEKLY_PLAN);
+    const persisted = safeParseJSON<PersistedWeeklyPlan>(raw, { weekStartDate: getThisWeekMonday(), overlaySchedule: [] });
+    await safeSetItem(STORAGE_KEYS.WEEKLY_PLAN, JSON.stringify({ ...persisted, overlaySchedule: updated }));
+  }, [state.overlaySchedule]);
 
   return (
-    <Ctx.Provider value={{ ...state, weeklySchedule: state.overlaySchedule, generateWeeklyPlan }}>
+    <Ctx.Provider value={{ ...state, weeklySchedule: state.overlaySchedule, generateWeeklyPlan, rebuildSkeleton, setDayWorkoutFocus }}>
       {children}
     </Ctx.Provider>
   );

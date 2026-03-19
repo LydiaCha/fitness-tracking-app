@@ -10,7 +10,7 @@ import { useRouter } from 'expo-router';
 import { useAppTheme } from '@/context/ThemeContext';
 import { AppThemeType } from '@/constants/theme';
 import { Logo } from '@/components/Logo';
-import { createWelcomeStyles } from './welcome.styles';
+import { createWelcomeStyles } from '@/styles/welcome.styles';
 
 // ─── Animated ring component ──────────────────────────────────────────────────
 function Ring({

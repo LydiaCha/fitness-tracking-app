@@ -13,7 +13,8 @@ export type EventType =
   | 'yoga'
   | 'prep'
   | 'free'
-  | 'plan-review';
+  | 'plan-review'
+  | 'custom';
 
 export interface ScheduleEvent {
   time: string;

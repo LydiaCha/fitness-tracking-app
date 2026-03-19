@@ -7,7 +7,7 @@ import { RecipeCard } from './RecipeCard';
 import { SHAKE_RECIPES, MEAL_IDEAS } from '@/constants/nutritionData';
 import { EVENT_ICONS, MEAL_CAT_COLORS, isBullet, toggleSetItem } from './checklistUtils';
 import { BulletRow } from './BulletRow';
-import { WorkoutCard } from './WorkoutCard';
+import { WorkoutCard, SessionSummary } from './WorkoutCard';
 
 export { EVENT_ICONS, MEAL_CAT_COLORS, isBullet, toggleSetItem };
 
@@ -19,9 +19,13 @@ interface ChecklistItemProps {
   isLast: boolean;
   onToggle: () => void;
   onSkip: () => void;
+  onLogSets?: () => void;
+  onChangeFocus?: (focus: string) => void;
+  sessionSummary?: SessionSummary | null;
+  otherDayFocuses?: string[];
 }
 
-export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }: ChecklistItemProps) {
+export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip, onLogSets, onChangeFocus, sessionSummary, otherDayFocuses }: ChecklistItemProps) {
   const { theme } = useAppTheme();
   const s = useMemo(() => createChecklistItemStyles(theme), [theme]);
 
@@ -176,12 +180,15 @@ export function ChecklistItem({ event, done, skipped, isLast, onToggle, onSkip }
             </Text>
           )}
 
-          {isGymEvent && event.detail && event.workoutType && (
+          {isGymEvent && event.workoutType && (
             <WorkoutCard
               workoutType={event.workoutType}
               workoutFocus={event.workoutFocus ?? ''}
               duration={event.duration}
-              detail={event.detail}
+              onLogSets={onLogSets}
+              onChangeFocus={onChangeFocus}
+              sessionSummary={sessionSummary}
+              otherDayFocuses={otherDayFocuses}
             />
           )}
 

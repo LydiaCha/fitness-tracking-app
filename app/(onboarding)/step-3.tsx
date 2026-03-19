@@ -9,7 +9,7 @@ import { AppThemeType } from '@/constants/theme';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { Gender } from '@/constants/userProfile';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 7;
 
 function cmToFtIn(cm: string): { ft: string; inches: string } {
   const val = parseFloat(cm);
@@ -240,7 +240,7 @@ const styles = (theme: AppThemeType) => StyleSheet.create({
   progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: theme.border },
   progressDotActive: { backgroundColor: theme.primary },
   emoji:      { fontSize: 48, marginTop: 16 },
-  heading:    { fontSize: 28, fontWeight: '700', color: theme.textPrimary, marginTop: 8 },
+  heading:    { fontSize: 26, fontWeight: '700', color: theme.textPrimary, marginTop: 8 },
   sub:        { fontSize: 16, color: theme.textMuted, lineHeight: 22, marginBottom: 24 },
   fieldLabel: { fontSize: 14, fontWeight: '500', color: theme.textMuted, marginBottom: 8 },
   pillRow:    { flexDirection: 'row', gap: 10, marginBottom: 20 },

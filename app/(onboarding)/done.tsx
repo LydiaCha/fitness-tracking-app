@@ -10,9 +10,11 @@ import { useAuth } from '@/context/AuthContext';
 import {
   calcMacroTargets, DEFAULT_PROFILE, saveUserProfile,
   UserProfile, ActivityLevel, FitnessGoal, Gender,
-  GOAL_LABELS, ACTIVITY_LABELS,
+  GOAL_LABELS, ACTIVITY_LABELS, DAY_NAMES,
 } from '@/constants/userProfile';
 import { logger } from '@/utils/logger';
+import { STORAGE_KEYS, toKey } from '@/utils/appConstants';
+import { safeGetItem, safeSetItem } from '@/utils/storage';
 
 // Auto-assign gym days based on count
 function buildGymDays(count: number): number[] {
@@ -24,8 +26,6 @@ function buildGymDays(count: number): number[] {
     default: return [1, 3, 5];
   }
 }
-
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function OnboardingDone() {
   const { theme }                   = useAppTheme();
@@ -51,6 +51,16 @@ export default function OnboardingDone() {
   const handleStart = async () => {
     setSaving(true);
     try {
+      // Idempotency guard: if the user force-quits after saveUserProfile but
+      // before completeOnboarding, re-tapping "Start" must not re-save and
+      // overwrite any changes made in a retry. Raw storage (not loadUserProfile)
+      // is null only on a true first install — non-null means save already ran.
+      const existingRaw = await safeGetItem(STORAGE_KEYS.PROFILE);
+      if (existingRaw) {
+        await completeOnboarding();
+        return;
+      }
+
       const profile: UserProfile = {
         ...DEFAULT_PROFILE,
         name:          data.name,
@@ -61,12 +71,18 @@ export default function OnboardingDone() {
         activityLevel: activity as ActivityLevel,
         fitnessGoal:   goal    as FitnessGoal,
         gymDays,
-        calories: macros.calories,
-        protein:  macros.protein,
-        carbs:    macros.carbs,
-        fat:      macros.fat,
+        caloriesTarget: null,
+        proteinTarget:  null,
+        carbsTarget:    null,
+        fatTarget:      null,
+        dietaryRestrictions:   data.dietaryRestrictions,
+        cuisinePreferences:    data.cuisinePreferences,
+        dislikedIngredientIds: [],
+        maxPrepMins:           data.maxPrepMins,
       };
       await saveUserProfile(profile);
+      // Seed weight log with the onboarding weight as the first entry
+      await safeSetItem(STORAGE_KEYS.WEIGHTS, JSON.stringify([{ date: toKey(new Date()), kg: weightKg }]));
       await completeOnboarding();
     } catch (e) {
       logger.error('storage', 'onboarding_save', 'Failed to save onboarding profile', { error: String(e) });
@@ -134,6 +150,20 @@ export default function OnboardingDone() {
             {gymDays.map(d => DAY_NAMES[d]).join(' · ')}
           </Text>
         </View>
+
+        {/* Dietary preferences summary — only shown if non-default */}
+        {(data.dietaryRestrictions.length > 0 || data.cuisinePreferences.length > 0 || data.maxPrepMins !== 30) && (
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Food preferences</Text>
+            {data.dietaryRestrictions.length > 0 && (
+              <Text style={s.cardValue}>{data.dietaryRestrictions.join(', ')}</Text>
+            )}
+            {data.cuisinePreferences.length > 0 && (
+              <Text style={s.gymNote}>Cuisines: {data.cuisinePreferences.join(', ')}</Text>
+            )}
+            <Text style={s.gymNote}>Max prep: {data.maxPrepMins === 60 ? '60+ min' : `${data.maxPrepMins} min`}</Text>
+          </View>
+        )}
 
         <Text style={s.editNote}>
           You can adjust all of this in your Profile at any time.

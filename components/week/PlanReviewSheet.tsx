@@ -19,6 +19,7 @@ import { useAppTheme } from '@/context/ThemeContext';
 import { AppThemeType } from '@/constants/theme';
 import { MealRecord, MealType, MEAL_ORDER } from '@/types/meal';
 import { callClaude, extractJSON } from '@/utils/claudeApi';
+import { logger } from '@/utils/logger';
 import { MEAL_META } from '@/constants/mealColors';
 
 // ─── Day names (Mon-first) ────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ Each object: { "type": "budget"|"prep"|"macro", "emoji": "...", "title": "...", 
         const parsed = extractJSON<Suggestion[]>(raw);
         if (Array.isArray(parsed) && parsed.length > 0) setSuggestions(parsed);
       })
-      .catch(() => {}) // non-critical
+      .catch(e => logger.warn('network', 'plan_review_suggestions', 'Failed to load AI suggestions', { error: String(e) }))
       .finally(() => setLoadingSugs(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -224,7 +225,7 @@ Each object: { "type": "budget"|"prep"|"macro", "emoji": "...", "title": "...", 
                       <Text style={s.dayDate}>{nextWeekDate(dayIdx)}</Text>
                     </View>
                     <Text style={s.dayKcal}>{totalKcal} kcal</Text>
-                    <Text style={s.dayChevron}>{isCollapsed ? '›' : '⌄'}</Text>
+                    <Text style={[s.dayChevron, !isCollapsed && s.dayChevronOpen]}>›</Text>
                   </TouchableOpacity>
 
                   {/* Meal entries */}
@@ -374,7 +375,8 @@ function createStyles(theme: AppThemeType) {
     dayName:      { fontSize: 14, fontWeight: '800', color: theme.textPrimary },
     dayDate:      { fontSize: 12, color: theme.textMuted },
     dayKcal:      { fontSize: 12, fontWeight: '600', color: theme.textMuted },
-    dayChevron:   { fontSize: 14, color: theme.textMuted, marginLeft: 4 },
+    dayChevron:     { fontSize: 14, color: theme.textMuted, marginLeft: 4 },
+    dayChevronOpen: { transform: [{ rotate: '90deg' }] },
 
     // Meal row
     mealRow:      { paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: 1, borderTopColor: theme.border + '66' },

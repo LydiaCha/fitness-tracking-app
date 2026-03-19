@@ -1,20 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { MealType } from '@/types/meal';
+import { MealType, MEAL_ORDER } from '@/types/meal';
 import { useMealPlan } from '@/context/MealPlanContext';
 import { getTodayMonFirst } from '@/utils/appConstants';
 import { IndexStyles } from '@/app/(tabs)/index.styles';
 import { AppThemeType } from '@/constants/theme';
 
-const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'smoothie'];
+import { MEAL_META } from '@/constants/mealColors';
 
-const MEAL_META: Record<MealType, { label: string; emoji: string; color: string }> = {
-  breakfast: { label: 'Breakfast', emoji: '☀️', color: '#FF9F0A' },
-  lunch:     { label: 'Lunch',     emoji: '🥗', color: '#30D158' },
-  dinner:    { label: 'Dinner',    emoji: '🌙', color: '#0A84FF' },
-  snack:     { label: 'Snack',     emoji: '🍎', color: '#BF5AF2' },
-  smoothie:  { label: 'Smoothie',  emoji: '🥤', color: '#32D9CB' },
-};
 
 export function TodayMealsCard({
   theme,
@@ -107,7 +100,9 @@ export function TodayMealsCard({
                   <Text style={s.todayMacroLabel}>fat</Text>
                 </View>
                 {meal.tip ? (
-                  <Text style={s.todayMealTip} numberOfLines={2}>💡 {meal.tip}</Text>
+                  <View style={s.todayMealTip}>
+                    <Text style={s.todayMealTipText} numberOfLines={2}>💡 {meal.tip}</Text>
+                  </View>
                 ) : null}
               </View>
             )}

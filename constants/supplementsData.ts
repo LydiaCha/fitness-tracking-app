@@ -1,3 +1,5 @@
+import { UserProfile } from './userProfile';
+
 export interface Supplement {
   id: string;
   name: string;
@@ -119,4 +121,70 @@ export const SUPPLEMENTS: Supplement[] = [
     withFood: false,
   },
 ];
+
+/**
+ * Returns the subset of supplements relevant to this user's profile.
+ *
+ * Rules:
+ *  - creatine:    gym days required; not shown for fat-loss goal (it's a performance, not weight-loss tool)
+ *  - whey/casein: gym days required; hidden for vegan or dairy-free users
+ *  - omega3:      hidden for vegan users (fish oil); plant-based omega-3 is out of scope for now
+ *  - electrolytes: gym days required; not useful for sedentary users
+ *  - vitaminD / vitaminC / magnesium: universally recommended
+ */
+export function getRelevantSupplements(profile: UserProfile): Supplement[] {
+  const { fitnessGoal, activityLevel, gymDays, dietaryRestrictions } = profile;
+  const isVegan      = dietaryRestrictions.includes('vegan');
+  const isDairyFree  = dietaryRestrictions.includes('dairy-free');
+  const hasGymDays   = gymDays.length > 0;
+  const isSedentary  = activityLevel === 'sedentary';
+
+  return SUPPLEMENTS.filter(s => {
+    switch (s.id) {
+      case 'creatine':
+        return hasGymDays && fitnessGoal !== 'lose';
+      case 'whey':
+      case 'casein':
+        return hasGymDays && !isVegan && !isDairyFree;
+      case 'omega3':
+        return !isVegan;
+      case 'electrolytes':
+        return hasGymDays && !isSedentary;
+      default:
+        return true; // vitaminD, vitaminC, magnesium — always relevant
+    }
+  });
+}
+
+/**
+ * Returns the schedule builder detail string for the morning supplement event,
+ * personalised by dietary restrictions.
+ */
+export function getMorningSupplementDetail(profile: UserProfile): string {
+  const isVegan = profile.dietaryRestrictions.includes('vegan');
+  const omega3  = isVegan
+    ? 'Algae Omega-3 (250mg DHA/EPA — plant-based alternative to fish oil)'
+    : 'Omega-3 Fish Oil (1g EPA/DHA — reduces inflammation and accelerates muscle repair)';
+  return `Vitamin D3 (2000 IU) + ${omega3}. D3 supports immunity, mood and testosterone — most people are deficient without realising. Both are fat-soluble, so take with food.`;
+}
+
+/**
+ * Returns the schedule builder detail string for the pre-sleep supplement event,
+ * personalised by gym days and dietary restrictions.
+ */
+export function getEveningSupplementDetail(profile: UserProfile): string {
+  const isVegan     = profile.dietaryRestrictions.includes('vegan');
+  const isDairyFree = profile.dietaryRestrictions.includes('dairy-free');
+  const hasGymDays  = profile.gymDays.length > 0;
+
+  const lines: string[] = [
+    'Magnesium Glycinate (300mg) + final glass of water. Magnesium reduces muscle tension, deepens sleep quality and supports overnight recovery. Glycinate is the most bioavailable form — gentle on the stomach.',
+  ];
+
+  if (hasGymDays && !isVegan && !isDairyFree) {
+    lines.push('Casein protein (25g) — slow-digesting protein that feeds your muscles over 6–8 hours while you sleep. Take with warm milk or water.');
+  }
+
+  return lines.join('\n\n');
+}
 

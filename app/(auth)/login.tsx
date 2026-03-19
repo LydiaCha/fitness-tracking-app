@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useAppTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getAuthErrorMessage } from '@/utils/errorMessages';
-import { createLoginStyles } from './login.styles';
+import { createLoginStyles } from '@/styles/login.styles';
 
 type Field = 'email' | 'password' | null;
 

@@ -83,7 +83,7 @@ export function createNutritionStyles(theme: AppThemeType) {
       marginBottom: 14,
     },
     weekStripTitle: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: '700',
       color: theme.textMuted,
       textTransform: 'uppercase',
@@ -288,34 +288,119 @@ export function createNutritionStyles(theme: AppThemeType) {
     momentumLabel:  { fontSize: 8, color: theme.textMuted, fontWeight: '500', textAlign: 'center' },
 
     // ── Weight card ───────────────────────────────────────────────────────────
-    weightCard: {
+    carouselOuter: { marginBottom: 14 },
+    carouselDots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, paddingTop: 12 },
+    carouselDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.border },
+    carouselDotActive: { width: 20, height: 6, borderRadius: 3, backgroundColor: theme.primary },
+
+    // Tab pills above the carousel
+    carouselTabs: {
+      flexDirection: 'row',
+      backgroundColor: theme.bgCardAlt,
+      borderRadius: 14,
+      padding: 3,
+      marginBottom: 10,
+      gap: 2,
+    },
+    carouselTab: {
+      flex: 1,
+      paddingVertical: 9,
+      borderRadius: 11,
+      alignItems: 'center',
+    },
+    carouselTabActive: {
+      backgroundColor: theme.primary,
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    carouselTabText:       { fontSize: 13, fontWeight: '600', color: theme.textMuted },
+    carouselTabTextActive: { color: '#fff', fontWeight: '700' },
+
+    // Shared card style for both carousel slides
+    carouselCard: {
+      flex: 1,
       backgroundColor: theme.bgCard,
       borderRadius: 18,
       borderWidth: 1,
       borderColor: theme.border,
-      marginBottom: 14,
       overflow: 'hidden',
     },
+
+    // Post-log coaching banner
+    postLogBanner: {
+      backgroundColor: theme.primary + '18',
+      borderRadius: 10,
+      padding: 14,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.primary,
+      marginBottom: 14,
+    },
+    postLogBannerText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      lineHeight: 20,
+    },
+
     weightHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 16,
-      paddingVertical: 14,
+      paddingTop: 14,
+      paddingBottom: 12,
     },
     weightHeaderLeft: { flex: 1 },
     weightTitle:      { fontSize: 14, fontWeight: '700', color: theme.textPrimary },
     weightSubtitle:   { fontSize: 12, color: theme.textMuted, marginTop: 2 },
     weightExpandBtn:  { fontSize: 13, color: theme.textMuted, fontWeight: '600', paddingLeft: 8 },
+
+    // Hero number section — sits between header and body
+    weightHero: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingBottom: 4,
+    },
+    weightHeroTrend: {
+      fontSize: 12,
+      color: theme.textMuted,
+      paddingHorizontal: 16,
+      paddingBottom: 14,
+    },
+    weightCurrent:  { fontSize: 32, fontWeight: '900', letterSpacing: -1 },
+    weightDelta:    { fontSize: 13, fontWeight: '700' },
+
+    // BMI hero — centered, prominent
+    bmiHero: {
+      alignItems: 'center',
+      paddingVertical: 18,
+      paddingHorizontal: 16,
+    },
+    bmiHeroNumber: {
+      fontSize: 72,
+      fontWeight: '900',
+      letterSpacing: -4,
+      lineHeight: 76,
+    },
+    bmiHeroLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 2.5,
+      textTransform: 'uppercase',
+      marginTop: 6,
+      opacity: 0.55,
+    },
+
     weightBody: {
       paddingHorizontal: 16,
+      paddingTop: 14,
       paddingBottom: 16,
       borderTopWidth: 1,
       borderTopColor: theme.border + '55',
     },
-    weightSummary:  { flexDirection: 'row', alignItems: 'baseline', gap: 10, paddingTop: 14, marginBottom: 4 },
-    weightCurrent:  { fontSize: 28, fontWeight: '800' },
-    weightDelta:    { fontSize: 13, fontWeight: '700' },
-    weightTrendText:{ fontSize: 12, color: theme.textMuted, flex: 1, textAlign: 'right' },
     weightInputRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
     weightInput: {
       flex: 1,
@@ -337,6 +422,100 @@ export function createNutritionStyles(theme: AppThemeType) {
     historyKg:     { fontSize: 13, fontWeight: '700', color: theme.textPrimary },
     historyHint:   { fontSize: 10, color: theme.textMuted, marginTop: 8, textAlign: 'center' },
     emptyText:     { fontSize: 13, color: theme.textMuted, textAlign: 'center', marginTop: 12, lineHeight: 20 },
+    weightNudge: {
+      backgroundColor: theme.primary + '15',
+      borderRadius: 10,
+      padding: 12,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.primary,
+      marginBottom: 14,
+    },
+    weightNudgeText: { fontSize: 13, color: theme.textSecondary, lineHeight: 20 },
+    historyShowMore: { fontSize: 13, color: theme.primary, fontWeight: '600', textAlign: 'center', paddingVertical: 8 },
+
+    bmiBadge:         { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+    bmiCategoryText:  { fontSize: 11, fontWeight: '700' },
+    bmiScaleLabels:   { flexDirection: 'row', marginTop: 8, marginBottom: 14 },
+    bmiScaleLabelText: { fontSize: 9, fontWeight: '700', textAlign: 'center', letterSpacing: 0.2 },
+    bmiCoachBox: {
+      borderRadius: 10,
+      padding: 12,
+      borderLeftWidth: 3,
+      marginBottom: 10,
+    },
+    bmiCoachText:    { fontSize: 13, color: theme.textSecondary, lineHeight: 20 },
+    bmiTip:     { backgroundColor: theme.primary + '18', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: theme.primary + '40' },
+    bmiTipText: { fontSize: 12, color: theme.primaryLight, lineHeight: 17 },
+
+    // ── Steps card ────────────────────────────────────────────────────────────
+    stepsHeader:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border + '55' },
+    stepsHeaderLeft:  { gap: 2 },
+    stepsTitle:       { fontSize: 14, fontWeight: '700', color: theme.textPrimary },
+    stepsSubtitle:    { fontSize: 11, color: theme.textMuted },
+    stepsConnectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.success + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: theme.success + '55' },
+    stepsConnectedDot:   { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.success },
+    stepsConnectedText:  { fontSize: 10, fontWeight: '700', color: theme.success },
+
+    stepsHero:        { alignItems: 'center', paddingVertical: 18, paddingHorizontal: 16 },
+    stepsHeroNumber:  { fontSize: 64, fontWeight: '900', letterSpacing: -3, lineHeight: 68, color: theme.textPrimary },
+    stepsHeroGoal:    { fontSize: 12, color: theme.textMuted, marginTop: 2 },
+
+    stepsProgressTrack: { height: 6, backgroundColor: theme.bgCardAlt, borderRadius: 3, marginHorizontal: 16, marginBottom: 4, overflow: 'hidden' },
+    stepsProgressFill:  { height: 6, borderRadius: 3 },
+    stepsProgressLabel: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 16 },
+    stepsProgressPct:   { fontSize: 11, fontWeight: '700' },
+    stepsProgressGoalText: { fontSize: 11, color: theme.textMuted },
+
+    stepsBars:        { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 52, paddingHorizontal: 16, marginBottom: 6 },
+    stepsBarCol:      { flex: 1, alignItems: 'center', gap: 3 },
+    stepsBarTrack:    { width: '100%', backgroundColor: theme.bgCardAlt, borderRadius: 3, overflow: 'hidden', justifyContent: 'flex-end' },
+    stepsBarFill:     { width: '100%', borderRadius: 3 },
+    stepsBarLabel:    { fontSize: 8, color: theme.textMuted, fontWeight: '500', textAlign: 'center' },
+
+    stepsTip:         { backgroundColor: theme.primary + '18', borderRadius: 8, padding: 10, margin: 16, marginTop: 4, borderWidth: 1, borderColor: theme.primary + '40' },
+    stepsTipText:     { fontSize: 12, color: theme.primaryLight, lineHeight: 17 },
+
+    // Not-connected state
+    stepsEmptyCard:   { flex: 1, padding: 20, justifyContent: 'center' },
+    stepsEmptyIcon:   { fontSize: 36, textAlign: 'center', marginBottom: 12 },
+    stepsEmptyTitle:  { fontSize: 16, fontWeight: '800', color: theme.textPrimary, textAlign: 'center', marginBottom: 6 },
+    stepsEmptyBody:   { fontSize: 13, color: theme.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+    stepsConnectBtn:  { backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginBottom: 24 },
+    stepsConnectBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+    // Steps bottom sheet
+    stepsSheetScrim:  { flex: 1, backgroundColor: '#00000055' },
+    stepsSheet:       { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12, backgroundColor: theme.bgCard },
+    stepsSheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16, backgroundColor: theme.border },
+    stepsSheetTitle:  { fontSize: 18, fontWeight: '800', color: theme.textPrimary, marginBottom: 4 },
+    stepsSheetSub:    { fontSize: 13, color: theme.textSecondary, lineHeight: 20, marginBottom: 20 },
+    stepsSheetRow:    { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: theme.border },
+    stepsSheetIcon:   { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+    stepsSheetIconEmoji: { fontSize: 20 },
+    stepsSheetRowText:  { flex: 1 },
+    stepsSheetRowLabel: { fontSize: 15, fontWeight: '600', color: theme.textPrimary, marginBottom: 2 },
+    stepsSheetRowSub:   { fontSize: 12, color: theme.textSecondary },
+    stepsSheetChevron:  { fontSize: 18, color: theme.textMuted },
+    stepsSheetSoonLabel: { fontSize: 10, fontWeight: '700', color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 20, marginBottom: 10 },
+    stepsSheetSoonGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    stepsSheetSoonPill:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bgCardAlt },
+    stepsSheetSoonPillText: { fontSize: 12, fontWeight: '600', color: theme.textSecondary },
+    stepsSheetSoonPillBadge: { fontSize: 9, fontWeight: '700', color: theme.textMuted },
+    stepsSheetBack:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
+    stepsSheetBackText: { fontSize: 15, fontWeight: '600', color: theme.primary },
+    stepsSheetInput:   { backgroundColor: theme.bgCardAlt, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 32, fontWeight: '800', color: theme.textPrimary, textAlign: 'center', borderWidth: 1, borderColor: theme.border, marginBottom: 16 },
+    stepsSheetSaveBtn: { backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+    stepsSheetSaveBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+    // ── Coach Insights ────────────────────────────────────────────────────────
+    coachSection:        { marginBottom: 4 },
+    coachSectionTitle:   { fontSize: 11, fontWeight: '800', color: theme.textMuted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10 },
+    coachInsightCard:    { backgroundColor: theme.bgCard, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderWidth: 1, borderColor: theme.border },
+    coachInsightIconWrap:{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    coachInsightEmoji:   { fontSize: 18 },
+    coachInsightBody:    { flex: 1, gap: 3 },
+    coachInsightTitle:   { fontSize: 13, fontWeight: '700', color: theme.textPrimary },
+    coachInsightText:    { fontSize: 13, color: theme.textSecondary, lineHeight: 19 },
   });
 }
 

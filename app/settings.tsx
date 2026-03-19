@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Switch,
-  Alert, ScrollView, StatusBar,
+  View, Text, StyleSheet, TouchableOpacity,
+  Alert, ScrollView, StatusBar, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -10,11 +10,8 @@ import { useAppTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { AppThemeType } from '@/constants/theme';
 import { STORAGE_KEYS } from '@/utils/appConstants';
-import { safeGetItem, safeSetItem, safeMultiRemove, safeParseJSON } from '@/utils/storage';
+import { safeMultiRemove } from '@/utils/storage';
 import { logger } from '@/utils/logger';
-import { useFocusEffect } from 'expo-router';
-
-const AI_ENABLED_KEY = STORAGE_KEYS.AI_ENABLED;
 
 function useStyles(theme: AppThemeType) {
   return useMemo(() => StyleSheet.create({
@@ -34,7 +31,6 @@ function useStyles(theme: AppThemeType) {
     rowSub:       { fontSize: 12, color: theme.textMuted, marginTop: 1 },
     chevron:      { fontSize: 16, color: theme.textMuted },
 
-    rowSwitch:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.border + '55' },
     rowSwitchLast:{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13 },
 
     dangerText:   { color: theme.error },
@@ -48,23 +44,6 @@ export default function SettingsScreen() {
   const { signOut } = useAuth();
   const router = useRouter();
   const s = useStyles(theme);
-
-  const [aiEnabled, setAiEnabled] = useState(true);
-
-  useFocusEffect(useCallback(() => {
-    safeGetItem(AI_ENABLED_KEY).then(val => {
-      if (val !== null) setAiEnabled(safeParseJSON(val, true));
-    });
-  }, []));
-
-  const toggleAI = useCallback(async (val: boolean) => {
-    setAiEnabled(val);
-    const ok = await safeSetItem(AI_ENABLED_KEY, JSON.stringify(val));
-    if (!ok) {
-      logger.warn('storage', 'toggleAI', 'Failed to persist AI setting');
-      setAiEnabled(!val);
-    }
-  }, []);
 
   const clearData = useCallback((label: string, keys: string[], onDone?: () => void) => {
     Alert.alert(`Clear ${label}?`, 'This cannot be undone.', [
@@ -122,41 +101,13 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* ── AI Features ── */}
-        <Text style={s.sectionLabel}>AI Features</Text>
-        <View style={s.card}>
-          <View style={s.rowSwitch}>
-            <Text style={s.rowIcon}>✨</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowLabel}>AI Meal Suggestions</Text>
-              <Text style={s.rowSub}>Personalised ideas based on your schedule</Text>
-            </View>
-            <Switch
-              value={aiEnabled}
-              onValueChange={toggleAI}
-              trackColor={{ false: theme.border, true: theme.primary + '88' }}
-              thumbColor={aiEnabled ? theme.primary : theme.textMuted}
-            />
-          </View>
-          <View style={s.rowSwitchLast}>
-            <Text style={s.rowIcon}>🤖</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowLabel}>AI Food Photo</Text>
-              <Text style={s.rowSub}>Identify food from your camera</Text>
-            </View>
-            <Text style={{ fontSize: 13, color: aiEnabled ? theme.meal : theme.textMuted, fontWeight: '600' }}>
-              {aiEnabled ? 'On' : 'Off'}
-            </Text>
-          </View>
-        </View>
-
         {/* ── Data & Privacy ── */}
         <Text style={s.sectionLabel}>Data & Privacy</Text>
         <View style={s.card}>
           {[
             { icon: '🍽️', label: 'Clear meal logs',           keys: [STORAGE_KEYS.MEAL_LOGS] },
             { icon: '⚖️', label: 'Clear weight log',           keys: [STORAGE_KEYS.WEIGHTS] },
-            { icon: '💪', label: 'Clear workout & water logs', keys: [STORAGE_KEYS.WORKOUTS, STORAGE_KEYS.WATER] },
+            { icon: '💪', label: 'Clear workout & water logs', keys: [STORAGE_KEYS.WORKOUTS, STORAGE_KEYS.WATER_GOAL, STORAGE_KEYS.WATER_ML] },
             { icon: '🗄️', label: 'Clear AI & barcode cache',   keys: [STORAGE_KEYS.AI_MEALS, STORAGE_KEYS.BARCODE_CACHE] },
           ].map(({ icon, label, keys }, i, arr) => (
             <TouchableOpacity
@@ -175,7 +126,7 @@ export default function SettingsScreen() {
         <Text style={s.sectionLabel}>Account</Text>
         <View style={s.card}>
           <TouchableOpacity style={s.rowLast} onPress={handleSignOut} activeOpacity={0.7}>
-            <Text style={s.rowIcon}>🚪</Text>
+            <Text style={s.rowIcon}>👋</Text>
             <Text style={s.signOutText}>Sign out</Text>
           </TouchableOpacity>
         </View>

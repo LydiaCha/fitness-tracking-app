@@ -8,7 +8,7 @@ import { AppThemeType } from '@/constants/theme';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { FitnessGoal, GOAL_LABELS } from '@/constants/userProfile';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 7;
 
 const GOALS: { value: FitnessGoal; emoji: string; desc: string }[] = [
   { value: 'lose',     emoji: '🔥', desc: 'Reduce body fat while keeping muscle' },
@@ -86,7 +86,7 @@ const styles = (theme: AppThemeType) => StyleSheet.create({
   progressDotActive: { backgroundColor: theme.primary },
   content: { flex: 1, justifyContent: 'center', gap: 12 },
   emoji:   { fontSize: 48 },
-  heading: { fontSize: 28, fontWeight: '700', color: theme.textPrimary },
+  heading: { fontSize: 26, fontWeight: '700', color: theme.textPrimary },
   sub:     { fontSize: 16, color: theme.textMuted, lineHeight: 22 },
   options: { gap: 12, marginTop: 16 },
   option: {

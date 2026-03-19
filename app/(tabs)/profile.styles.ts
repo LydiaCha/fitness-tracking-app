@@ -39,9 +39,9 @@ export function createProfileStyles(theme: AppThemeType) {
     // Gym day toggles
     daysRow:      { flexDirection: 'row', gap: 6, marginBottom: 12 },
     dayBtn:       { flex: 1, aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: theme.border, backgroundColor: theme.bgCard },
-    dayBtnOn:     { backgroundColor: theme.primary + '22', borderColor: theme.primary },
+    dayBtnOn:     { backgroundColor: theme.gym + '22', borderColor: theme.gym },
     dayText:      { fontSize: 12, fontWeight: '700', color: theme.textMuted },
-    dayTextOn:    { color: theme.primary },
+    dayTextOn:    { color: theme.gym },
 
     // Macro display
     macroDisplayGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 14, gap: 8 },
@@ -114,6 +114,13 @@ export function createProfileStyles(theme: AppThemeType) {
     versionText:  { fontSize: 12, color: theme.textMuted, textAlign: 'center', marginTop: 16 },
     groceryCta:   { backgroundColor: theme.meal + '20', borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: theme.meal + '60' },
     groceryCtaText: { fontSize: 14, fontWeight: '700', color: theme.meal },
+    prefsCta:     { backgroundColor: theme.primary + '20', borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: theme.primary + '60' },
+    prefsCtaText: { fontSize: 14, fontWeight: '700', color: theme.primary },
+
+    // ── Schedule day pill row ─────────────────────────────────────────────────
+    scheduleDayPill:       { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center', backgroundColor: theme.bgCardAlt, borderWidth: 1, borderColor: theme.border },
+    scheduleDayPillActive: { backgroundColor: theme.primary, borderColor: theme.primary },
+    scheduleDayPillText:   { fontSize: 12, fontWeight: '600', color: theme.textSecondary },
   });
 }
 

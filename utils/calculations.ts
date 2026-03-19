@@ -2,11 +2,10 @@
  * Shared calculation utilities used across Progress and Profile screens.
  */
 
-import { AppThemeType } from '@/constants/theme';
 import { toKey, isGymDay } from '@/utils/appConstants';
 
 type DayLog = { [dateKey: string]: boolean };
-type Period  = 'today' | 'week' | 'month';
+export type Period  = 'today' | 'week' | 'month';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -52,37 +51,6 @@ export function getPeriodScore(
     if (water[k]) done++;
   }
   return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
-}
-
-export function scoreColor(pct: number, theme: AppThemeType): string {
-  if (pct === 100) return theme.meal;
-  if (pct >= 80)   return theme.warning;
-  if (pct >= 50)   return theme.primary;
-  return theme.textSecondary;
-}
-
-// ─── Streaks ─────────────────────────────────────────────────────────────────
-
-/**
- * Returns how many consecutive gym days the user has completed.
- * Today's workout not yet being done does not break the streak.
- */
-export function calcWorkoutStreak(workouts: DayLog, gymDays: number[]): number {
-  const today = new Date();
-  let streak = 0;
-  for (let i = 0; i < 90; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    if (!isGymDay(d, gymDays)) continue;
-    if (workouts[toKey(d)]) {
-      streak++;
-    } else if (i === 0) {
-      // today's session not done yet — don't break streak
-    } else {
-      break;
-    }
-  }
-  return streak;
 }
 
 /**

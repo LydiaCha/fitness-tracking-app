@@ -4,15 +4,18 @@ import { useScrollToTop } from '@react-navigation/native';
 import {
   View,
   Text,
+  Modal,
   ScrollView,
   TouchableOpacity,
   TextInput,
   StatusBar,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,25 +28,39 @@ import Reanimated, {
   Easing as REasing,
 } from 'react-native-reanimated';
 import { AppThemeType } from '@/constants/theme';
-import { createNutritionStyles } from './nutrition.styles';
+import { createNutritionStyles } from '@/styles/nutrition.styles';
 import { useAppTheme } from '@/context/ThemeContext';
 import { STORAGE_KEYS, toKey, isGymDay } from '@/utils/appConstants';
+import { loadWaterGoalLog } from '@/utils/waterLog';
 import {
   getPeriodScore,
   getDatesForPeriod,
-  calcWorkoutStreak,
   calcHabitStreak,
   getWeeklyScores,
+  Period,
 } from '@/utils/calculations';
-import { loadUserProfile, DEFAULT_PROFILE } from '@/constants/userProfile';
+import { calcWorkoutStreak } from '@/utils/streak';
+import { useUserProfile } from '@/context/UserProfileContext';
+import { saveUserProfile } from '@/constants/userProfile';
 import { safeGetItem, safeSetItem, safeParseJSON } from '@/utils/storage';
 import { logger } from '@/utils/logger';
+import {
+  analyzeTrend, getWeightBadge, getTrendStatsLine,
+  getPostLogMessage, getNudgeMessage, WeightEntry,
+} from '@/utils/weightTrend';
+import { useSteps, DEFAULT_STEP_GOAL } from '@/hooks/useSteps';
+import { getCoachInsights, CoachInsight } from '@/utils/coach';
+import { MACRO_TARGETS } from '@/constants/nutritionData';
+import {
+  loadWorkoutLogs, computeStrengthSnapshots,
+  getE1RMHistory, getLoggedExerciseIds, WorkoutLog,
+} from '@/utils/strengthLog';
+import { calcEMA } from '@/utils/weightTrend';
+import { getExerciseById } from '@/constants/exerciseRegistry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type DayLog      = { [dateKey: string]: boolean };
-interface WeightEntry { date: string; kg: number; }
-type Period      = 'today' | 'week' | 'month';
-type DotState    = 'full' | 'partial' | 'missed' | 'future';
+type DayLog   = { [dateKey: string]: boolean };
+type DotState = 'full' | 'partial' | 'missed' | 'future';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PERIODS: { value: Period; label: string }[] = [
@@ -56,6 +73,26 @@ const MON_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 // Consistent dark palette for the hero card
 const HERO_GRADIENT = ['#1a0533', '#0d0220', '#050110'] as const;
+
+// BMI scale zones — flex proportional to range within 15–40 display window
+const BMI_ZONES = [
+  { label: 'Underweight', flex: 7,  color: '#38bdf8' }, // 15–18.5
+  { label: 'Healthy',     flex: 13, color: '#4ade80' }, // 18.5–25
+  { label: 'Overweight',  flex: 10, color: '#fbbf24' }, // 25–30
+  { label: 'Obese',       flex: 20, color: '#f87171' }, // 30–40
+] as const;
+
+type BmiLabel = 'Underweight' | 'Healthy' | 'Overweight' | 'Obese';
+
+function getBmiCoachLine(val: number, label: BmiLabel): string {
+  if (label === 'Underweight')
+    return `At ${val}, you're below the healthy range. Focus on nourishing, protein-rich meals — your plan is already built to support you.`;
+  if (label === 'Healthy')
+    return `At ${val}, you're right in the healthy range. This is the goal — now it's about staying consistent and building on it.`;
+  if (label === 'Overweight')
+    return `At ${val}, you're just above the healthy range. Small, consistent changes to nutrition and activity add up faster than you think.`;
+  return `At ${val}, your BMI is in the obese range. The most important step is already done — you're here and you're tracking. Every log counts.`;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function ringColor(pct: number, theme: AppThemeType): string {
@@ -256,21 +293,45 @@ const CHART_RANGES: { value: ChartRange; label: string }[] = [
   { value: 'all', label: 'All' },
 ];
 
-function filterByRange(entries: WeightEntry[], range: ChartRange): WeightEntry[] {
-  if (range === 'all') return entries;
+function filterByRange(
+  entries: WeightEntry[],
+  emaHistory: number[],
+  range: ChartRange,
+): { data: WeightEntry[]; emas: number[] } {
+  if (range === 'all') return { data: entries, emas: emaHistory };
   const days = range === '30d' ? 30 : 90;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-  return entries.filter(e => e.date >= cutoffStr);
+  const cutoffStr = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const paired = entries
+    .map((e, i) => ({ entry: e, ema: emaHistory[i] }))
+    .filter(p => p.entry.date >= cutoffStr);
+  return { data: paired.map(p => p.entry), emas: paired.map(p => p.ema) };
 }
 
-function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThemeType }) {
-  const [range, setRange] = useState<ChartRange>('90d');
-  const [width, setWidth] = useState(0);
-  const data = filterByRange(entries, range);
+function WeightChart({
+  entries,
+  emaHistory,
+  theme,
+}: {
+  entries:    WeightEntry[];
+  emaHistory: number[];
+  theme:      AppThemeType;
+}) {
+  const hasExtendedHistory = useMemo(() => {
+    if (entries.length < 2) return false;
+    const span = new Date(entries[entries.length - 1].date).getTime()
+               - new Date(entries[0].date).getTime();
+    return span / 86_400_000 > 30;
+  }, [entries]);
 
-  const CHART_H = 160;
+  const [range, setRange] = useState<ChartRange>('30d');
+  const [width, setWidth] = useState(0);
+
+  const { data, emas } = useMemo(
+    () => hasExtendedHistory ? filterByRange(entries, emaHistory, range) : { data: entries, emas: emaHistory },
+    [entries, emaHistory, range, hasExtendedHistory],
+  );
+
+  const CHART_H = 148;
   const PAD_TOP = 12;
   const PAD_BOT = 24;
   const Y_AXIS  = 36;
@@ -278,17 +339,21 @@ function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThe
   const vals   = data.map(e => e.kg);
   const rawMin = data.length ? Math.min(...vals) : 0;
   const rawMax = data.length ? Math.max(...vals) : 1;
-  const padding = Math.max((rawMax - rawMin) * 0.15, 0.5);
-  const minV   = rawMin - padding;
-  const maxV   = rawMax + padding;
-  const range_ = maxV - minV || 1;
+  const pad    = Math.max((rawMax - rawMin) * 0.2, 0.5);
+  const minV   = rawMin - pad;
+  const maxV   = rawMax + pad;
+  const rangeV = maxV - minV || 1;
   const usableW = Math.max(width - Y_AXIS, 1);
 
-  const pts = data.map((e, i) => ({
-    x: Y_AXIS + (data.length === 1 ? usableW / 2 : (i / (data.length - 1)) * usableW),
-    y: PAD_TOP + (1 - (e.kg - minV) / range_) * CHART_H,
-    entry: e,
-  }));
+  const xAt = (i: number) =>
+    Y_AXIS + (data.length === 1 ? usableW / 2 : (i / (data.length - 1)) * usableW);
+  const yAt = (kg: number) =>
+    PAD_TOP + (1 - (kg - minV) / rangeV) * CHART_H;
+
+  // Raw dot positions (de-emphasised)
+  const rawPts  = data.map((e, i) => ({ x: xAt(i), y: yAt(e.kg),  entry: e }));
+  // EMA line positions (smooth, prominent)
+  const emaPts  = emas.map((v, i) => ({ x: xAt(i), y: yAt(v) }));
 
   const gridLines = useMemo(() => {
     const step  = (rawMax - rawMin) < 2 ? 0.5 : (rawMax - rawMin) < 5 ? 1 : 2;
@@ -305,13 +370,10 @@ function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThe
     return [0, Math.round(step), Math.round(step * 2), data.length - 1];
   }, [data.length]);
 
-  const trendUp    = data.length >= 2 && data[data.length - 1].kg > data[0].kg;
-  const totalDelta = data.length >= 2 ? data[data.length - 1].kg - data[0].kg : null;
-
   return (
     <View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-        <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
+      {hasExtendedHistory && (
+        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
           {CHART_RANGES.map(r => (
             <TouchableOpacity
               key={r.value}
@@ -328,23 +390,19 @@ function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThe
             </TouchableOpacity>
           ))}
         </View>
-        {totalDelta !== null && (
-          <Text style={{ fontSize: 12, fontWeight: '700', color: trendUp ? theme.gym : theme.meal }}>
-            {trendUp ? '+' : ''}{totalDelta.toFixed(1)} kg
-          </Text>
-        )}
-      </View>
+      )}
 
       {data.length === 0 ? (
-        <View style={{ height: 80, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ height: 72, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 13, color: theme.textMuted }}>No entries in this range</Text>
         </View>
       ) : (
         <View onLayout={e => setWidth(e.nativeEvent.layout.width)}>
           {width > 0 && (
             <View style={{ height: CHART_H + PAD_TOP + PAD_BOT, position: 'relative' }}>
+              {/* Grid lines */}
               {gridLines.map(v => {
-                const yPos = PAD_TOP + (1 - (v - minV) / range_) * CHART_H;
+                const yPos = yAt(v);
                 return (
                   <React.Fragment key={v}>
                     <Text style={{
@@ -355,14 +413,25 @@ function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThe
                     </Text>
                     <View style={{
                       position: 'absolute', left: Y_AXIS, right: 0, top: yPos, height: 1,
-                      backgroundColor: theme.border + '44',
+                      backgroundColor: theme.border + '33',
                     }} />
                   </React.Fragment>
                 );
               })}
 
-              {pts.slice(0, -1).map((p1, i) => {
-                const p2  = pts[i + 1];
+              {/* Raw dots — small, de-emphasised */}
+              {rawPts.map((p, i) => (
+                <View key={i} style={{
+                  position: 'absolute',
+                  left: p.x - 3, top: p.y - 3,
+                  width: 6, height: 6, borderRadius: 3,
+                  backgroundColor: theme.primary + '44',
+                }} />
+              ))}
+
+              {/* EMA smooth line — prominent */}
+              {emaPts.slice(0, -1).map((p1, i) => {
+                const p2  = emaPts[i + 1];
                 const dx  = p2.x - p1.x;
                 const dy  = p2.y - p1.y;
                 const len = Math.sqrt(dx * dx + dy * dy);
@@ -379,42 +448,39 @@ function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThe
                 );
               })}
 
-              {pts.map((p, i) => {
-                const isLatest = i === pts.length - 1;
-                const size = isLatest ? 12 : 6;
+              {/* EMA endpoint dot + label */}
+              {emaPts.length > 0 && (() => {
+                const p   = emaPts[emaPts.length - 1];
+                const ema = emas[emas.length - 1];
                 return (
-                  <View key={i} style={{
-                    position: 'absolute',
-                    left: p.x - size / 2, top: p.y - size / 2,
-                    width: size, height: size, borderRadius: size / 2,
-                    backgroundColor: isLatest ? theme.primary : theme.primary + '66',
-                    borderWidth: isLatest ? 2 : 0,
-                    borderColor: theme.bgCard,
-                  }} />
-                );
-              })}
-
-              {pts.length > 0 && (() => {
-                const p = pts[pts.length - 1];
-                return (
-                  <Text style={{
-                    position: 'absolute', left: p.x - 26, top: p.y - 20,
-                    width: 52, textAlign: 'center',
-                    fontSize: 10, fontWeight: '800', color: theme.primary,
-                  }}>
-                    {data[data.length - 1].kg} kg
-                  </Text>
+                  <>
+                    <View style={{
+                      position: 'absolute',
+                      left: p.x - 5, top: p.y - 5,
+                      width: 10, height: 10, borderRadius: 5,
+                      backgroundColor: theme.primary,
+                      borderWidth: 2, borderColor: theme.bgCard,
+                    }} />
+                    <Text style={{
+                      position: 'absolute', left: p.x - 26, top: p.y - 20,
+                      width: 52, textAlign: 'center',
+                      fontSize: 10, fontWeight: '800', color: theme.primary,
+                    }}>
+                      {ema.toFixed(1)} kg
+                    </Text>
+                  </>
                 );
               })()}
 
+              {/* X-axis date labels */}
               {xLabelIdx.map(i => (
                 <Text key={i} style={{
                   position: 'absolute',
-                  left: pts[i].x - 20, top: CHART_H + PAD_TOP + 6,
+                  left: rawPts[i].x - 20, top: CHART_H + PAD_TOP + 6,
                   width: 40, textAlign: 'center',
                   fontSize: 9, color: theme.textMuted,
                 }}>
-                  {pts[i].entry.date.slice(5).replace('-', '/')}
+                  {rawPts[i].entry.date.slice(5).replace('-', '/')}
                 </Text>
               ))}
             </View>
@@ -425,10 +491,178 @@ function WeightChart({ entries, theme }: { entries: WeightEntry[]; theme: AppThe
   );
 }
 
+// ─── Strength Chart ───────────────────────────────────────────────────────────
+type StrengthRange = '30d' | '90d' | 'all';
+
+function filterStrengthByRange(
+  history: { date: string; e1rm: number }[],
+  range: StrengthRange,
+): { date: string; e1rm: number }[] {
+  if (range === 'all') return history;
+  const days = range === '30d' ? 30 : 90;
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  return history.filter(p => p.date >= cutoff);
+}
+
+function StrengthChart({
+  history,
+  theme,
+}: {
+  history:  { date: string; e1rm: number }[];
+  theme:    AppThemeType;
+}) {
+  const hasHistory30d = useMemo(() => {
+    if (history.length < 2) return false;
+    const span = new Date(history[history.length - 1].date).getTime()
+               - new Date(history[0].date).getTime();
+    return span / 86_400_000 > 30;
+  }, [history]);
+
+  const [range, setRange]  = useState<StrengthRange>('30d');
+  const [width, setWidth]  = useState(0);
+
+  const data = useMemo(
+    () => hasHistory30d ? filterStrengthByRange(history, range) : history,
+    [history, range, hasHistory30d],
+  );
+
+  const emas = useMemo(() => calcEMA(data.map(p => p.e1rm), 0.3), [data]);
+
+  const CHART_H = 120;
+  const PAD     = { top: 10, bottom: 28, left: 4, right: 4 };
+
+  const minV = useMemo(() => Math.min(...data.map(p => p.e1rm), ...emas) * 0.97, [data, emas]);
+  const maxV = useMemo(() => Math.max(...data.map(p => p.e1rm), ...emas) * 1.03, [data, emas]);
+  const range_ = maxV - minV || 1;
+
+  const xAt = (i: number) =>
+    width <= 0 || data.length <= 1
+      ? (i / Math.max(1, data.length - 1)) * width
+      : PAD.left + (i / (data.length - 1)) * (width - PAD.left - PAD.right);
+  const yAt = (v: number) => PAD.top + ((maxV - v) / range_) * CHART_H;
+
+  const color = theme.gym ?? '#a855f7';
+
+  if (data.length < 2) {
+    return (
+      <View style={{ paddingHorizontal: 16, paddingVertical: 20, alignItems: 'center' }}>
+        <Text style={{ fontSize: 13, color: theme.textMuted, textAlign: 'center' }}>
+          Log 3 sessions to unlock your strength trend
+        </Text>
+      </View>
+    );
+  }
+
+  const emaPts  = emas.map((v, i) => ({ x: xAt(i), y: yAt(v) }));
+  const rawPts  = data.map((p, i) => ({ x: xAt(i), y: yAt(p.e1rm) }));
+
+  // Sparse x-axis labels
+  const totalPts = data.length;
+  const labelStep = Math.max(1, Math.floor(totalPts / 4));
+  const xLabelIdx = Array.from({ length: totalPts }, (_, i) => i)
+    .filter(i => i === 0 || i === totalPts - 1 || i % labelStep === 0);
+
+  return (
+    <View style={{ marginHorizontal: 16, marginBottom: 4 }}>
+      {hasHistory30d && (
+        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+          {(['30d', '90d', 'all'] as StrengthRange[]).map(r => (
+            <TouchableOpacity
+              key={r}
+              onPress={() => setRange(r)}
+              style={{
+                paddingHorizontal: 10, paddingVertical: 4,
+                borderRadius: 8,
+                backgroundColor: range === r ? color + '30' : 'transparent',
+                borderWidth: 1,
+                borderColor: range === r ? color + '88' : theme.border,
+              }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: range === r ? color : theme.textMuted }}>
+                {r.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <View
+        style={{ height: CHART_H + PAD.top + PAD.bottom }}
+        onLayout={e => setWidth(e.nativeEvent.layout.width)}
+      >
+        {width > 0 && (
+          <View style={{ position: 'absolute', width, height: CHART_H + PAD.top + PAD.bottom }}>
+            {/* Raw dots */}
+            {rawPts.map((p, i) => (
+              <View key={i} style={{
+                position: 'absolute',
+                left: p.x - 3, top: p.y - 3,
+                width: 6, height: 6, borderRadius: 3,
+                backgroundColor: color + '55',
+              }} />
+            ))}
+
+            {/* EMA line segments */}
+            {emaPts.slice(0, -1).map((p1, i) => {
+              const p2  = emaPts[i + 1];
+              const dx  = p2.x - p1.x;
+              const dy  = p2.y - p1.y;
+              const len = Math.sqrt(dx * dx + dy * dy);
+              const ang = Math.atan2(dy, dx) * (180 / Math.PI);
+              return (
+                <View key={i} style={{
+                  position:  'absolute',
+                  left:       (p1.x + p2.x) / 2 - len / 2,
+                  top:        (p1.y + p2.y) / 2 - 1.5,
+                  width:      len,
+                  height:     3,
+                  borderRadius: 1.5,
+                  backgroundColor: color,
+                  transform: [{ rotate: `${ang}deg` }],
+                }} />
+              );
+            })}
+
+            {/* EMA endpoint dot + label */}
+            {emaPts.length > 0 && (() => {
+              const p   = emaPts[emaPts.length - 1];
+              const val = emas[emas.length - 1];
+              return (
+                <View key="end" style={{ position: 'absolute', left: p.x - 5, top: p.y - 5 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color }} />
+                  <Text style={{
+                    position: 'absolute', left: -18, top: -18,
+                    fontSize: 11, fontWeight: '700', color,
+                    width: 46, textAlign: 'center',
+                  }}>
+                    {val.toFixed(1)} kg
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {/* X-axis labels */}
+            {xLabelIdx.map(i => (
+              <Text key={i} style={{
+                position: 'absolute',
+                left: rawPts[i].x - 20, top: CHART_H + PAD.top + 6,
+                width: 40, textAlign: 'center',
+                fontSize: 9, color: theme.textMuted,
+              }}>
+                {data[i].date.slice(5).replace('-', '/')}
+              </Text>
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ProgressScreen() {
   const { theme, isDark } = useAppTheme();
   const s = useMemo(() => createNutritionStyles(theme), [theme]);
+  const { profile, effectiveMacros, updateProfile, refreshProfile } = useUserProfile();
 
   const [workouts, setWorkouts] = useState<DayLog>({});
   const [water,    setWater]    = useState<DayLog>({});
@@ -437,11 +671,27 @@ export default function ProgressScreen() {
   const [period,   setPeriod]   = useState<Period>('today');
   const [inputKg,  setInputKg]  = useState('');
   const [loading,  setLoading]  = useState(true);
-  const [gymDays,  setGymDays]  = useState<number[]>(DEFAULT_PROFILE.gymDays);
-  const [weightExpanded, setWeightExpanded] = useState(false);
+  const gymDays = profile.gymDays;
+  const [showAllHistory,   setShowAllHistory]   = useState(false);
+  const [carouselPage,     setCarouselPage]     = useState(0);
+  const [postLogMsg,       setPostLogMsg]       = useState<string | null>(null);
+  const [stepsSheet,       setStepsSheet]       = useState<'closed' | 'menu' | 'manual'>('closed');
+  const [stepsInput,       setStepsInput]       = useState('');
+  const [workoutLogs,      setWorkoutLogs]      = useState<WorkoutLog[]>([]);
+  const [selectedExercise, setSelectedExercise] = useState<string | null>(null);
+  const carouselRef = useRef<ScrollView>(null);
+  const { width: windowWidth } = useWindowDimensions();
+  const cardWidth = windowWidth - 32; // matches scrollContent paddingHorizontal: 16
 
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
+
+  // Auto-dismiss post-log banner after 6 s
+  useEffect(() => {
+    if (!postLogMsg) return;
+    const id = setTimeout(() => setPostLogMsg(null), 6000);
+    return () => clearTimeout(id);
+  }, [postLogMsg]);
 
   const todayKey = toKey(new Date());
 
@@ -450,22 +700,23 @@ export default function ProgressScreen() {
   const [displayPct, setDisplayPct] = useState(0);
 
   useFocusEffect(useCallback(() => {
+    refreshProfile();
     Promise.all([
       safeGetItem(STORAGE_KEYS.WORKOUTS),
-      safeGetItem(STORAGE_KEYS.WATER),
+      loadWaterGoalLog(MACRO_TARGETS.water),
       safeGetItem(STORAGE_KEYS.WEIGHTS),
       safeGetItem(STORAGE_KEYS.MEAL_LOGS),
-      loadUserProfile(),
-    ]).then(([wo, wa, wt, ml, prof]) => {
+      loadWorkoutLogs(),
+    ]).then(([wo, wa, wt, ml, wl]) => {
       setWorkouts(safeParseJSON(wo, {} as DayLog));
-      setWater(safeParseJSON(wa, {} as DayLog));
+      setWater(wa as DayLog);
       setWeights(safeParseJSON(wt, [] as WeightEntry[]));
       setMealLogs(safeParseJSON(ml, {} as Record<string, unknown[]>));
-      setGymDays(prof.gymDays);
+      setWorkoutLogs(wl as WorkoutLog[]);
     }).catch(e => {
       logger.error('storage', 'nutrition_load', 'Failed to load progress data', { error: String(e) });
     }).finally(() => setLoading(false));
-  }, []));
+  }, [refreshProfile, effectiveMacros.calories]));
 
   const saveWeights = useCallback(async (data: WeightEntry[]) => {
     setWeights(data);
@@ -477,6 +728,7 @@ export default function ProgressScreen() {
   }, [weights]);
 
   const addWeight = useCallback(() => {
+    Keyboard.dismiss();
     const val = parseFloat(inputKg.replace(',', '.'));
     if (isNaN(val) || val < 30 || val > 200) {
       Alert.alert('Invalid weight', 'Enter a value between 30–200 kg.');
@@ -488,7 +740,15 @@ export default function ProgressScreen() {
       .sort((a, b) => a.date.localeCompare(b.date));
     saveWeights(updated);
     setInputKg('');
-  }, [inputKg, weights, todayKey, saveWeights]);
+    // Compute post-log message from the updated data immediately (not from stale state)
+    setPostLogMsg(getPostLogMessage(analyzeTrend(updated), profile.fitnessGoal));
+    // Keep profile.weightKg in sync with the weight log
+    const syncedProfile = { ...profile, weightKg: val };
+    updateProfile(syncedProfile);
+    saveUserProfile(syncedProfile).catch(e =>
+      logger.error('storage', 'weight_sync', 'Failed to sync weight to profile', { error: String(e) }),
+    );
+  }, [inputKg, weights, todayKey, saveWeights, profile, updateProfile]);
 
   const deleteWeight = useCallback((date: string) => {
     Alert.alert('Delete entry', `Remove weight entry for ${date}?`, [
@@ -522,7 +782,52 @@ export default function ProgressScreen() {
   const latestW       = weights.length > 0 ? weights[weights.length - 1] : null;
   const prevW         = weights.length > 1 ? weights[weights.length - 2] : null;
   const weightDelta   = latestW && prevW ? latestW.kg - prevW.kg : null;
-  const recentWeights = useMemo(() => weights.slice().reverse().slice(0, 8), [weights]);
+  const HISTORY_PAGE   = 5;
+  const reversedWeights = useMemo(() => weights.slice().reverse(), [weights]);
+  const visibleWeights  = showAllHistory ? reversedWeights : reversedWeights.slice(0, HISTORY_PAGE);
+  const hiddenCount     = reversedWeights.length - HISTORY_PAGE;
+
+  const daysSinceLastWeighIn = useMemo(() => {
+    if (!latestW) return null;
+    return Math.floor((Date.now() - new Date(latestW.date).getTime()) / 86_400_000);
+  }, [latestW]);
+
+  const trend = useMemo(() => analyzeTrend(weights), [weights]);
+
+  const strengthSnapshots  = useMemo(() => computeStrengthSnapshots(workoutLogs), [workoutLogs]);
+  const loggedExerciseIds  = useMemo(() => getLoggedExerciseIds(strengthSnapshots), [strengthSnapshots]);
+  const activeExercise     = selectedExercise ?? loggedExerciseIds[0] ?? null;
+  const e1rmHistory        = useMemo(
+    () => activeExercise ? getE1RMHistory(strengthSnapshots, activeExercise) : [],
+    [strengthSnapshots, activeExercise],
+  );
+
+  const weightNudge = useMemo(
+    () => getNudgeMessage(weights, daysSinceLastWeighIn),
+    [weights, daysSinceLastWeighIn],
+  );
+
+  const weightBadge = getWeightBadge(trend);
+  const trendStats  = getTrendStatsLine(trend);
+
+  const steps = useSteps();
+
+  const coachInsights = useMemo(
+    () => getCoachInsights(trend, weights, workoutStreak, waterStreak, steps.weeklySteps, DEFAULT_STEP_GOAL, profile.fitnessGoal, profile.gymDays.length),
+    [trend, workoutStreak, waterStreak, steps.weeklySteps, profile.fitnessGoal, profile.gymDays.length],
+  );
+
+  const bmiData = useMemo(() => {
+    const kg = latestW?.kg ?? profile.weightKg;
+    const h  = profile.heightCm;
+    if (!kg || !h) return null;
+    const val = Math.round(kg / Math.pow(h / 100, 2) * 10) / 10;
+    if (val < 10 || val > 60) return null; // sanity check
+    if (val < 18.5) return { val, label: 'Underweight', color: theme.warning };
+    if (val < 25)   return { val, label: 'Healthy',     color: theme.success };
+    if (val < 30)   return { val, label: 'Overweight',  color: theme.warning };
+    return               { val, label: 'Obese',         color: theme.gym };
+  }, [latestW, profile.weightKg, profile.heightCm, theme]);
 
   const periodDates  = useMemo(() => getDatesForPeriod(period), [period]);
   const gymExpected  = useMemo(() => periodDates.filter(d => isGymDay(d, gymDays)).length, [periodDates, gymDays]);
@@ -684,6 +989,27 @@ export default function ProgressScreen() {
               </View>
             </LinearGradient>
           </View>
+
+          {/* ── Coach Insights ── */}
+          {coachInsights.length > 0 && (
+            <View style={s.coachSection}>
+              <Text style={s.coachSectionTitle}>Coach</Text>
+              {coachInsights.map((insight: CoachInsight) => {
+                const accentColor = (theme as Record<string, string>)[insight.colorKey] ?? theme.primary;
+                return (
+                  <View key={insight.id} style={s.coachInsightCard}>
+                    <View style={[s.coachInsightIconWrap, { backgroundColor: accentColor + '18' }]}>
+                      <Text style={s.coachInsightEmoji}>{insight.icon}</Text>
+                    </View>
+                    <View style={s.coachInsightBody}>
+                      <Text style={s.coachInsightTitle}>{insight.title}</Text>
+                      <Text style={s.coachInsightText}>{insight.body}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {/* ── Period Tabs ── */}
           <View style={s.periodTabRow}>
@@ -873,90 +1199,495 @@ export default function ProgressScreen() {
             </View>
           </View>
 
-          {/* ── Weight Card (collapsible) ── */}
-          <View style={s.weightCard}>
-            <TouchableOpacity
-              style={s.weightHeader}
-              onPress={() => setWeightExpanded(v => !v)}
-              activeOpacity={0.7}
-            >
-              <View style={s.weightHeaderLeft}>
-                <Text style={s.weightTitle}>Weight Log</Text>
-                <Text style={s.weightSubtitle}>
-                  {latestW ? `Latest: ${latestW.kg} kg` : 'No entries yet'}
-                </Text>
-              </View>
-              {weightDelta !== null && (
-                <Text style={[s.weightDelta, {
-                  color: weightDelta < 0 ? theme.meal : weightDelta > 0 ? theme.gym : theme.textMuted,
-                }]}>
-                  {weightDelta > 0 ? '+' : ''}{weightDelta.toFixed(1)} kg
-                </Text>
-              )}
-              <Text style={s.weightExpandBtn}>{weightExpanded ? '▲' : '▼'}</Text>
-            </TouchableOpacity>
-
-            {weightExpanded && (
-              <View style={s.weightBody}>
-                {latestW && (
-                  <View style={s.weightSummary}>
-                    <Text style={[s.weightCurrent, { color: theme.primary }]}>{latestW.kg} kg</Text>
-                    {weightDelta !== null && (
-                      <Text style={[s.weightDelta, {
-                        color: weightDelta < 0 ? theme.meal : weightDelta > 0 ? theme.gym : theme.textSecondary,
-                      }]}>
-                        {weightDelta > 0 ? '+' : ''}{weightDelta.toFixed(1)} kg
-                      </Text>
-                    )}
-                    <Text style={s.weightTrendText}>vs previous entry</Text>
-                  </View>
-                )}
-
-                <WeightChart entries={weights} theme={theme} />
-
-                <View style={s.weightInputRow}>
-                  <TextInput
-                    style={s.weightInput}
-                    value={inputKg}
-                    onChangeText={setInputKg}
-                    placeholder="e.g. 62.5"
-                    placeholderTextColor={theme.textMuted}
-                    keyboardType="decimal-pad"
-                    returnKeyType="done"
-                    onSubmitEditing={addWeight}
-                  />
-                  <TouchableOpacity style={s.weightBtn} onPress={addWeight} activeOpacity={0.8}>
-                    <Text style={s.weightBtnText}>Log weight</Text>
-                  </TouchableOpacity>
+          {/* ── Strength Trend ── */}
+          {loggedExerciseIds.length > 0 && (
+            <View style={[s.carouselOuter, { marginBottom: 16 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 2 }}>
+                <View>
+                  <Text style={s.weightTitle}>Strength Trend</Text>
+                  <Text style={s.weightSubtitle}>Estimated 1RM · EMA smoothed</Text>
                 </View>
+              </View>
 
-                {weights.length > 0 && (
-                  <View style={s.weightHistory}>
-                    <Text style={s.historyLabel}>Recent entries</Text>
-                    {recentWeights.map(entry => (
+              {/* Exercise picker */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 10, gap: 6 }}>
+                {loggedExerciseIds.map(id => {
+                  const ex     = getExerciseById(id);
+                  const active = id === activeExercise;
+                  const color  = theme.gym ?? '#a855f7';
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      onPress={() => setSelectedExercise(id)}
+                      style={{
+                        paddingHorizontal: 12, paddingVertical: 6,
+                        borderRadius: 10,
+                        backgroundColor: active ? color + '25' : theme.bgCard,
+                        borderWidth: 1,
+                        borderColor: active ? color + '88' : theme.border,
+                      }}>
+                      <Text style={{ fontSize: 12, fontWeight: active ? '700' : '400', color: active ? color : theme.textSecondary }}>
+                        {ex?.name ?? id}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <StrengthChart history={e1rmHistory} theme={theme} />
+            </View>
+          )}
+
+          {/* ── Weight & BMI Carousel ── */}
+          <View style={s.carouselOuter}>
+            {/* Tab pills */}
+            <View style={s.carouselTabs}>
+              {(['Weight Log', 'BMI', 'Steps'] as const).map((label, i) => (
+                <TouchableOpacity
+                  key={label}
+                  style={[s.carouselTab, carouselPage === i && s.carouselTabActive]}
+                  onPress={() => {
+                    carouselRef.current?.scrollTo({ x: i * cardWidth, animated: true });
+                    setCarouselPage(i);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[s.carouselTabText, carouselPage === i && s.carouselTabTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <ScrollView
+              ref={carouselRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              contentContainerStyle={{ alignItems: 'stretch' }}
+              onMomentumScrollEnd={e =>
+                setCarouselPage(Math.round(e.nativeEvent.contentOffset.x / cardWidth))
+              }
+            >
+              {/* Slide 1 — Weight Log */}
+              <View style={{ width: cardWidth, paddingRight: 6, flex: 1 }}>
+                <View style={s.carouselCard}>
+                  <View style={s.weightHeader}>
+                    <View style={s.weightHeaderLeft}>
+                      <Text style={s.weightTitle}>Weight Log</Text>
+                      <Text style={s.weightSubtitle}>Weekly check-ins · EMA smoothed</Text>
+                    </View>
+                    <View style={[s.bmiBadge, { backgroundColor: weightBadge.color + '22', borderColor: weightBadge.color + '55' }]}>
+                      <Text style={[s.bmiCategoryText, { color: weightBadge.color }]}>{weightBadge.label}</Text>
+                    </View>
+                  </View>
+
+                  {latestW ? (
+                    <>
+                      <View style={s.weightHero}>
+                        <Text style={[s.weightCurrent, { color: theme.textPrimary }]}>{latestW.kg} kg</Text>
+                        {weightDelta !== null && (
+                          <Text style={[s.weightDelta, {
+                            color: weightDelta < 0 ? theme.success : weightDelta > 0 ? theme.gym : theme.textMuted,
+                          }]}>
+                            {weightDelta > 0 ? '+' : ''}{weightDelta.toFixed(1)} kg vs last
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={s.weightHeroTrend}>{trendStats}</Text>
+                    </>
+                  ) : (
+                    <Text style={[s.weightHeroTrend, { paddingTop: 4 }]}>Log your first entry below to start tracking.</Text>
+                  )}
+
+                  <View style={s.weightBody}>
+                    <WeightChart entries={weights} emaHistory={trend.emaHistory} theme={theme} />
+
+                    {postLogMsg ? (
                       <TouchableOpacity
-                        key={entry.date}
-                        style={s.historyRow}
-                        onLongPress={() => deleteWeight(entry.date)}
+                        style={s.postLogBanner}
+                        onPress={() => setPostLogMsg(null)}
+                        activeOpacity={0.8}
                       >
-                        <Text style={s.historyDate}>{entry.date}</Text>
-                        <Text style={s.historyKg}>{entry.kg} kg</Text>
+                        <Text style={s.postLogBannerText}>{postLogMsg}</Text>
+                        <Text style={[s.postLogBannerText, { opacity: 0.5, marginTop: 6, fontSize: 11 }]}>
+                          Tap to dismiss
+                        </Text>
                       </TouchableOpacity>
-                    ))}
-                    <Text style={s.historyHint}>Long-press to delete an entry</Text>
+                    ) : weightNudge.show ? (
+                      <View style={s.weightNudge}>
+                        <Text style={s.weightNudgeText}>💪 {weightNudge.msg}</Text>
+                      </View>
+                    ) : null}
+
+                    <View style={s.weightInputRow}>
+                      <TextInput
+                        style={s.weightInput}
+                        value={inputKg}
+                        onChangeText={setInputKg}
+                        placeholder="e.g. 72.5"
+                        placeholderTextColor={theme.textMuted}
+                        keyboardType="decimal-pad"
+                        returnKeyType="done"
+                        onSubmitEditing={addWeight}
+                        onFocus={() => {
+                          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+                        }}
+                      />
+                      <TouchableOpacity style={s.weightBtn} onPress={addWeight} activeOpacity={0.8}>
+                        <Text style={s.weightBtnText}>Log weight</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {weights.length > 0 && (
+                      <View style={s.weightHistory}>
+                        <Text style={s.historyLabel}>Recent entries</Text>
+                        {visibleWeights.map(entry => (
+                          <TouchableOpacity
+                            key={entry.date}
+                            style={s.historyRow}
+                            onLongPress={() => deleteWeight(entry.date)}
+                          >
+                            <Text style={s.historyDate}>{entry.date}</Text>
+                            <Text style={s.historyKg}>{entry.kg} kg</Text>
+                          </TouchableOpacity>
+                        ))}
+                        {hiddenCount > 0 && !showAllHistory && (
+                          <TouchableOpacity onPress={() => setShowAllHistory(true)} activeOpacity={0.7}>
+                            <Text style={s.historyShowMore}>Show {hiddenCount} more ↓</Text>
+                          </TouchableOpacity>
+                        )}
+                        {showAllHistory && reversedWeights.length > HISTORY_PAGE && (
+                          <TouchableOpacity onPress={() => setShowAllHistory(false)} activeOpacity={0.7}>
+                            <Text style={s.historyShowMore}>Show less ↑</Text>
+                          </TouchableOpacity>
+                        )}
+                        <Text style={s.historyHint}>Long-press to delete an entry</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* Slide 2 — BMI */}
+              <View style={{ width: cardWidth, paddingLeft: 6, flex: 1 }}>
+                {bmiData ? (() => {
+                  const indicatorPct = Math.max(1, Math.min(99, Math.round((bmiData.val - 15) / 25 * 100)));
+                  return (
+                    <View style={s.carouselCard}>
+                      {/* Header with subtle category color wash */}
+                      <View style={[s.weightHeader, { backgroundColor: bmiData.color + '0f' }]}>
+                        <View style={s.weightHeaderLeft}>
+                          <Text style={s.weightTitle}>Body Mass Index</Text>
+                          <Text style={s.weightSubtitle}>Weight ÷ height² · snapshot metric</Text>
+                        </View>
+                        <View style={[s.bmiBadge, { backgroundColor: bmiData.color + '22', borderColor: bmiData.color + '55' }]}>
+                          <Text style={[s.bmiCategoryText, { color: bmiData.color }]}>{bmiData.label}</Text>
+                        </View>
+                      </View>
+
+                      {/* Centred hero number */}
+                      <View style={[s.bmiHero, { backgroundColor: bmiData.color + '07' }]}>
+                        <Text style={[s.bmiHeroNumber, { color: bmiData.color }]}>{bmiData.val}</Text>
+                        <Text style={[s.bmiHeroLabel, { color: bmiData.color }]}>Body Mass Index</Text>
+                      </View>
+
+                      <View style={s.weightBody}>
+                        {/* Segmented scale with white position marker */}
+                        <View style={{ position: 'relative' }}>
+                          <View style={{ flexDirection: 'row', gap: 3, height: 10 }}>
+                            {BMI_ZONES.map(zone => {
+                              const isActive = bmiData.label === zone.label;
+                              return (
+                                <View key={zone.label} style={[
+                                  { flex: zone.flex, borderRadius: 4, backgroundColor: zone.color + (isActive ? 'ff' : '28') },
+                                  isActive && { shadowColor: zone.color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.65, shadowRadius: 7, elevation: 4 },
+                                ]} />
+                              );
+                            })}
+                          </View>
+                          <View style={{
+                            position: 'absolute',
+                            left: `${indicatorPct}%` as any,
+                            top: -4,
+                            width: 3,
+                            height: 18,
+                            borderRadius: 2,
+                            backgroundColor: '#ffffff',
+                            transform: [{ translateX: -1.5 }],
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.4,
+                            shadowRadius: 3,
+                            elevation: 4,
+                          }} />
+                        </View>
+                        <View style={s.bmiScaleLabels}>
+                          {BMI_ZONES.map(zone => (
+                            <Text key={zone.label} style={[s.bmiScaleLabelText, { flex: zone.flex, color: bmiData.label === zone.label ? zone.color : theme.textMuted }]}>
+                              {zone.label === 'Underweight' ? 'Under' : zone.label === 'Overweight' ? 'Over' : zone.label}
+                            </Text>
+                          ))}
+                        </View>
+                        <View style={[s.bmiCoachBox, { backgroundColor: bmiData.color + '14', borderLeftColor: bmiData.color }]}>
+                          <Text style={s.bmiCoachText}>{getBmiCoachLine(bmiData.val, bmiData.label as BmiLabel)}</Text>
+                        </View>
+                        <View style={s.bmiTip}>
+                          <Text style={s.bmiTipText}>💡 BMI = weight ÷ height². Useful context, but doesn't distinguish muscle from fat. Pair it with your weight trend for the real picture.</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })() : (
+                  <View style={[s.carouselCard, { padding: 20 }]}>
+                    <Text style={s.weightTitle}>Body Mass Index</Text>
+                    <Text style={[s.emptyText, { marginTop: 8 }]}>Add your height in Profile to see your BMI.</Text>
                   </View>
                 )}
-
-                {weights.length === 0 && (
-                  <Text style={s.emptyText}>No weight entries yet. Log your first one above!</Text>
-                )}
               </View>
-            )}
+
+              {/* Slide 3 — Steps */}
+              <View style={{ width: cardWidth, paddingLeft: 6, flex: 1 }}>
+                <View style={s.carouselCard}>
+                  {steps.source !== null && steps.todaySteps !== null ? (() => {
+                    const pct       = Math.min(1, steps.todaySteps / steps.goal);
+                    const pctInt    = Math.round(pct * 100);
+                    const stepColor = pct >= 1 ? theme.success : pct >= 0.6 ? theme.primary : theme.gym;
+                    const maxW      = steps.weeklySteps.length > 0 ? Math.max(...steps.weeklySteps.map(d => d.steps), 1) : 1;
+                    const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                    const sourceLabel = steps.source === 'sensor' ? '📱 Device' : '✏️ Manual';
+                    return (
+                      <>
+                        <View style={s.stepsHeader}>
+                          <View style={s.stepsHeaderLeft}>
+                            <Text style={s.stepsTitle}>Steps</Text>
+                            <Text style={s.stepsSubtitle}>Today's progress</Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <View style={s.stepsConnectedBadge}>
+                              <View style={s.stepsConnectedDot} />
+                              <Text style={s.stepsConnectedText}>{sourceLabel}</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setStepsSheet('menu')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Text style={{ fontSize: 12, color: theme.primary, fontWeight: '600' }}>Update</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        <View style={s.stepsHero}>
+                          <Text style={[s.stepsHeroNumber, { color: stepColor }]}>
+                            {steps.todaySteps.toLocaleString()}
+                          </Text>
+                          <Text style={s.stepsHeroGoal}>of {steps.goal.toLocaleString()} goal</Text>
+                        </View>
+
+                        <View style={s.stepsProgressTrack}>
+                          <View style={[s.stepsProgressFill, { width: `${pctInt}%` as any, backgroundColor: stepColor }]} />
+                        </View>
+                        <View style={s.stepsProgressLabel}>
+                          <Text style={[s.stepsProgressPct, { color: stepColor }]}>{pctInt}%</Text>
+                          <Text style={s.stepsProgressGoalText}>{steps.goal.toLocaleString()} goal</Text>
+                        </View>
+
+                        {steps.weeklySteps.length > 0 && (
+                          <View style={s.stepsBars}>
+                            {steps.weeklySteps.map((d, i) => {
+                              const barPct  = d.steps / maxW;
+                              const isToday = i === steps.weeklySteps.length - 1;
+                              return (
+                                <View key={d.dateKey} style={s.stepsBarCol}>
+                                  <View style={[s.stepsBarTrack, { height: 40 }]}>
+                                    <View style={[s.stepsBarFill, { height: `${Math.max(4, Math.round(barPct * 100))}%` as any, backgroundColor: isToday ? stepColor : (theme.primary + '55') }]} />
+                                  </View>
+                                  <Text style={s.stepsBarLabel}>{DAY_LABELS[i]}</Text>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+
+                        <View style={s.stepsTip}>
+                          <Text style={s.stepsTipText}>💡 Aim for 8,000+ steps daily. Research links consistent daily walking to lower cardiovascular risk, better sleep, and improved mood.</Text>
+                        </View>
+                      </>
+                    );
+                  })() : (
+                    <View style={s.stepsEmptyCard}>
+                      <Text style={s.stepsEmptyIcon}>👟</Text>
+                      <Text style={s.stepsEmptyTitle}>Track Your Steps</Text>
+                      <Text style={s.stepsEmptyBody}>
+                        See daily step counts, weekly trends, and progress toward your activity goal.
+                      </Text>
+                      <TouchableOpacity style={s.stepsConnectBtn} onPress={() => setStepsSheet('menu')} activeOpacity={0.85}>
+                        <Text style={s.stepsConnectBtnText}>Add Steps</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Carousel dots */}
+            <View style={s.carouselDots}>
+              {[0, 1, 2].map(i => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => {
+                    carouselRef.current?.scrollTo({ x: i * cardWidth, animated: true });
+                    setCarouselPage(i);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <View style={[s.carouselDot, carouselPage === i && s.carouselDotActive]} />
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           <View style={{ height: 24 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ── Steps bottom sheet ── */}
+      <Modal
+        visible={stepsSheet !== 'closed'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setStepsSheet('closed')}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={s.stepsSheetScrim} activeOpacity={1} onPress={() => setStepsSheet('closed')} />
+          <View style={s.stepsSheet}>
+            <View style={s.stepsSheetHandle} />
+
+            {stepsSheet === 'menu' && (
+              <>
+                <Text style={s.stepsSheetTitle}>Track Your Steps</Text>
+                <Text style={s.stepsSheetSub}>Choose how you'd like to log your daily steps.</Text>
+
+                <TouchableOpacity
+                  style={s.stepsSheetRow}
+                  activeOpacity={0.7}
+                  onPress={async () => {
+                    setStepsSheet('closed');
+                    await steps.connectSensor();
+                  }}>
+                  <View style={[s.stepsSheetIcon, { backgroundColor: theme.primary + '20' }]}>
+                    <Text style={s.stepsSheetIconEmoji}>📱</Text>
+                  </View>
+                  <View style={s.stepsSheetRowText}>
+                    <Text style={s.stepsSheetRowLabel}>Connect device</Text>
+                    <Text style={s.stepsSheetRowSub}>Use your phone's built-in step counter</Text>
+                  </View>
+                  <Text style={s.stepsSheetChevron}>›</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={s.stepsSheetRow}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setStepsInput('');
+                    setStepsSheet('manual');
+                  }}>
+                  <View style={[s.stepsSheetIcon, { backgroundColor: theme.gym + '20' }]}>
+                    <Text style={s.stepsSheetIconEmoji}>✏️</Text>
+                  </View>
+                  <View style={s.stepsSheetRowText}>
+                    <Text style={s.stepsSheetRowLabel}>Enter manually</Text>
+                    <Text style={s.stepsSheetRowSub}>Type in today's step count</Text>
+                  </View>
+                  <Text style={s.stepsSheetChevron}>›</Text>
+                </TouchableOpacity>
+
+                <Text style={s.stepsSheetSoonLabel}>Coming soon</Text>
+                <View style={s.stepsSheetSoonGrid}>
+                  {[
+                    { icon: '❤️', name: 'Apple Health' },
+                    { icon: '🤖', name: 'Health Connect' },
+                    { icon: '🏃', name: 'Strava' },
+                    { icon: '⌚', name: 'Garmin' },
+                    { icon: '⚖️', name: 'Withings' },
+                    { icon: '💪', name: 'Fitbit' },
+                  ].map(item => (
+                    <View key={item.name} style={s.stepsSheetSoonPill}>
+                      <Text style={{ fontSize: 13 }}>{item.icon}</Text>
+                      <Text style={s.stepsSheetSoonPillText}>{item.name}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {stepsSheet === 'manual' && (
+              <>
+                <TouchableOpacity style={s.stepsSheetBack} onPress={() => setStepsSheet('menu')}>
+                  <Text style={{ fontSize: 18, color: theme.primary }}>‹</Text>
+                  <Text style={s.stepsSheetBackText}>Back</Text>
+                </TouchableOpacity>
+                <Text style={s.stepsSheetTitle}>Log Steps</Text>
+                {steps.todaySteps !== null && steps.source === 'manual' ? (
+                  <Text style={s.stepsSheetSub}>
+                    Total so far: <Text style={{ color: theme.primary, fontWeight: '700' }}>{steps.todaySteps.toLocaleString()}</Text> steps
+                  </Text>
+                ) : (
+                  <Text style={s.stepsSheetSub}>Add or remove steps for today.</Text>
+                )}
+                <TextInput
+                  style={s.stepsSheetInput}
+                  value={stepsInput}
+                  onChangeText={setStepsInput}
+                  keyboardType="number-pad"
+                  placeholder="Number of steps"
+                  placeholderTextColor={theme.textMuted}
+                  autoFocus
+                />
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    style={[s.stepsSheetSaveBtn, { flex: 1 }, !stepsInput && { opacity: 0.4 }]}
+                    activeOpacity={0.85}
+                    disabled={!stepsInput}
+                    onPress={async () => {
+                      const val = parseInt(stepsInput.replace(/[^0-9]/g, ''));
+                      if (!isNaN(val) && val > 0) {
+                        await steps.logManual(val);
+                        setStepsSheet('closed');
+                        setStepsInput('');
+                      }
+                    }}>
+                    <Text style={s.stepsSheetSaveBtnText}>+ Add</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.stepsSheetSaveBtn, { flex: 1, backgroundColor: theme.error + '22', borderWidth: 1, borderColor: theme.error + '50' }, !stepsInput && { opacity: 0.4 }]}
+                    activeOpacity={0.85}
+                    disabled={!stepsInput}
+                    onPress={async () => {
+                      const val = parseInt(stepsInput.replace(/[^0-9]/g, ''));
+                      if (!isNaN(val) && val > 0) {
+                        await steps.logManual(-val);
+                        setStepsSheet('closed');
+                        setStepsInput('');
+                      }
+                    }}>
+                    <Text style={[s.stepsSheetSaveBtnText, { color: theme.error }]}>− Remove</Text>
+                  </TouchableOpacity>
+                </View>
+                {steps.todaySteps !== null && steps.source === 'manual' && (
+                  <TouchableOpacity
+                    style={{ alignSelf: 'center', marginTop: 14, paddingVertical: 6 }}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      await steps.resetManual();
+                      setStepsSheet('closed');
+                      setStepsInput('');
+                    }}>
+                    <Text style={{ fontSize: 13, color: theme.error, fontWeight: '500' }}>Reset to 0</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }

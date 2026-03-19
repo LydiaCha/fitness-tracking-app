@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { MealPlanEntry, MealIngredient, MealRecord, MealType } from '@/types/meal';
-import { PlanStyles } from '@/app/(tabs)/plan.styles';
+import { MealPlanEntry, MealIngredient, MealRecord, MealType, MEAL_ORDER } from '@/types/meal';
+import { WeekStyles } from '@/app/(tabs)/week.styles';
 
 const FULL_DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const MONTH_NAMES    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'smoothie'];
 
 function portionLabel(multiplier: number): string | null {
   if (multiplier <= 0.8)  return 'Small portion';
@@ -38,18 +37,13 @@ const MEAL_TYPE_LABELS: Record<MealType, string> = {
   smoothie:  'Smoothie',
 };
 
-const MEAL_TYPE_COLORS: Record<MealType, string> = {
-  breakfast: '#FF9F0A',
-  lunch:     '#30D158',
-  dinner:    '#0A84FF',
-  snack:     '#BF5AF2',
-  smoothie:  '#32D9CB',
-};
+import { MEAL_META } from '@/constants/mealColors';
 
 export function DayCard({
   day,
   date,
   isToday,
+  isPast,
   getEntriesForDay,
   getMealById,
   s,
@@ -57,11 +51,13 @@ export function DayCard({
   day: number;
   date: Date;
   isToday: boolean;
+  isPast?: boolean;
   getEntriesForDay: (d: number) => MealPlanEntry[];
   getMealById: (id: string) => MealRecord | undefined;
-  s: PlanStyles;
+  s: WeekStyles;
 }) {
   const entries = getEntriesForDay(day);
+  const [collapsed, setCollapsed] = useState(!!isPast);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   const sortedEntries = useMemo(
@@ -83,9 +79,13 @@ export function DayCard({
   }
 
   return (
-    <View style={[s.dayCard, isToday && s.dayCardToday]}>
-      <View style={[s.dayHeader, isToday && s.dayHeaderToday]}>
-        <Text style={s.dayName}>{FULL_DAY_NAMES[day]}</Text>
+    <View style={[s.dayCard, isToday && s.dayCardToday, isPast && !isToday && { opacity: 0.55 }]}>
+      <TouchableOpacity
+        style={[s.dayHeader, isToday && s.dayHeaderToday]}
+        onPress={() => setCollapsed(c => !c)}
+        activeOpacity={0.7}
+      >
+        <Text style={[s.dayName, isPast && !isToday && { opacity: 0.5 }]}>{FULL_DAY_NAMES[day]}</Text>
         <Text style={s.dayDate}>{dateLabel}</Text>
         {isToday && (
           <View style={s.todayBadge}>
@@ -93,15 +93,16 @@ export function DayCard({
           </View>
         )}
         {totalKcal > 0 && <Text style={s.dayKcal}>{totalKcal} kcal</Text>}
-      </View>
+        <Text style={[s.dayChevron, !collapsed && s.dayChevronOpen]}>›</Text>
+      </TouchableOpacity>
 
-      {sortedEntries.map(entry => {
+      {!collapsed && sortedEntries.map(entry => {
         const meal    = getMealById(entry.mealId);
         if (!meal) return null;
         const key     = `${entry.slot.day}-${entry.slot.mealType}-${entry.mealId}`;
         const kcal    = Math.round(entry.actualCalories);
         const protein = Math.round(entry.actualProtein);
-        const color   = MEAL_TYPE_COLORS[entry.slot.mealType];
+        const color   = MEAL_META[entry.slot.mealType].color;
         const portion = portionLabel(entry.portionMultiplier);
         const expanded = expandedKeys.has(key);
         const hasDetails = meal.ingredients.length > 0 || !!meal.instructions || !!meal.tip;
@@ -130,7 +131,7 @@ export function DayCard({
                 </View>
               </View>
               {hasDetails && (
-                <Text style={s.mealExpandArrow}>{expanded ? '▲' : '▼'}</Text>
+                <Text style={[s.mealExpandArrow, expanded && s.mealExpandArrowOpen]}>›</Text>
               )}
             </TouchableOpacity>
 

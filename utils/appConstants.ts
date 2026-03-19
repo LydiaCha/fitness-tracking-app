@@ -21,7 +21,6 @@ export const STORAGE_KEYS = {
   BARCODE_CACHE: '@peakroutine/barcode_cache',
   AI_MEALS:      '@peakroutine/ai_meals',
   // Settings
-  AI_ENABLED:    '@peakroutine/ai_enabled',
   AVATAR:        '@peakroutine/avatar_emoji',
   THEME:         '@peakroutine/theme',
   // Auth / onboarding
@@ -29,11 +28,19 @@ export const STORAGE_KEYS = {
   BIOMETRIC:     '@peakroutine/biometric_enabled',
   // Profile
   PROFILE:       '@peakroutine/user_profile',
+  // Strength / workout logs
+  STRENGTH_LOGS:      '@peakroutine/strength_logs',
   // AI weekly schedule overlay
   WEEKLY_PLAN:        '@peakroutine/weekly_plan',
   AI_MEALS_NEXT_WEEK: '@peakroutine/ai_meals_next_week',
   // Grocery list checked state (week-scoped, auto-expires on new week)
   GROCERY_CHECKED:    '@peakroutine/grocery_checked',
+  // User-defined recurring custom activities
+  CUSTOM_ACTIVITIES:  '@peakroutine/custom_activities',
+  // Daily event completion log (today's checked-off event indices)
+  EVENT_LOG:          '@peakroutine/event_log',
+  // AI-generated workout plan (exercises per gym day for the week)
+  AI_WORKOUTS:        '@peakroutine/ai_workouts',
 } as const;
 
 // Default gym days: Mon Tue Wed Thu Sat

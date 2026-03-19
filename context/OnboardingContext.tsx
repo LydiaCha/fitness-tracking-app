@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
-import { ActivityLevel, FitnessGoal, Gender } from '@/constants/userProfile';
+import { ActivityLevel, FitnessGoal, Gender, DietaryRestriction, CuisinePreference } from '@/constants/userProfile';
 
 export interface OnboardingData {
   name:          string;
@@ -10,6 +10,9 @@ export interface OnboardingData {
   weightKg:      string;
   activityLevel: ActivityLevel | null;
   gymDaysPerWeek: number;
+  dietaryRestrictions: DietaryRestriction[];
+  cuisinePreferences:  CuisinePreference[];
+  maxPrepMins:         number;
 }
 
 const defaults: OnboardingData = {
@@ -21,6 +24,9 @@ const defaults: OnboardingData = {
   weightKg:       '',
   activityLevel:  null,
   gymDaysPerWeek: 3,
+  dietaryRestrictions: [],
+  cuisinePreferences:  [],
+  maxPrepMins:         30,
 };
 
 interface OnboardingCtx {

@@ -221,6 +221,8 @@ export interface UserDietaryProfile {
   maxPrepMins: number;
   /** IDs of meals used in the last 7 days — used to enforce repeatTolerance */
   recentMealIds: string[];
+  /** Empty array = no preference (all cuisines OK) */
+  cuisinePreferences?: string[];
 }
 
 export interface MealPlanSlot {

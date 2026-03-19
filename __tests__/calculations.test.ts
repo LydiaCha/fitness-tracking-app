@@ -13,13 +13,11 @@
  *   daysAgo(7) = 2026-03-07 Sat (gym)
  */
 
+import { calcWorkoutStreak } from '@/utils/streak';
 import {
-  calcWorkoutStreak,
   calcHabitStreak,
   getPeriodScore,
-  scoreColor,
 } from '@/utils/calculations';
-import { AppThemeDark } from '@/constants/theme';
 
 const TODAY = new Date('2026-03-14T12:00:00.000Z');
 
@@ -141,16 +139,3 @@ describe('getPeriodScore', () => {
   });
 });
 
-// ─── scoreColor ───────────────────────────────────────────────────────────────
-
-describe('scoreColor', () => {
-  const t = AppThemeDark;
-
-  test('100 → green (meal)', () => expect(scoreColor(100, t)).toBe(t.meal));
-  test('99 → amber (warning)', () => expect(scoreColor(99, t)).toBe(t.warning));
-  test('80 → amber (warning)', () => expect(scoreColor(80, t)).toBe(t.warning));
-  test('79 → purple (primary)', () => expect(scoreColor(79, t)).toBe(t.primary));
-  test('50 → purple (primary)', () => expect(scoreColor(50, t)).toBe(t.primary));
-  test('49 → muted (textSecondary)', () => expect(scoreColor(49, t)).toBe(t.textSecondary));
-  test('0 → muted (textSecondary)', () => expect(scoreColor(0, t)).toBe(t.textSecondary));
-});

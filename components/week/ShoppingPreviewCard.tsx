@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PlanGrocerySection } from '@/utils/mealPlanner';
-import { PlanStyles } from '@/app/(tabs)/plan.styles';
+import { WeekStyles } from '@/app/(tabs)/week.styles';
 
 export function ShoppingPreviewCard({
   groceryList,
@@ -11,7 +11,7 @@ export function ShoppingPreviewCard({
 }: {
   groceryList: PlanGrocerySection[];
   onPress: () => void;
-  s: PlanStyles;
+  s: WeekStyles;
 }) {
   const totalItems = groceryList.reduce((sum, sec) => sum + sec.items.length, 0);
   if (totalItems === 0) return null;

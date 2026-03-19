@@ -67,3 +67,44 @@ export const AppTheme = AppThemeDark;
 
 export type AppThemeType = typeof AppThemeDark;
 
+/**
+ * App-wide typography scale. Font sizes and weights are theme-independent
+ * (they don't change between light/dark mode), so they live here rather than
+ * inside the theme objects.
+ *
+ * Semantic size names:
+ *   pageHeading  — main screen / modal title (26)
+ *   cardTitle    — card section title (16)
+ *   body         — default list rows, labels (15)
+ *   bodySmall    — secondary / muted supporting text (13)
+ *   label        — small-caps section dividers (11, uppercase)
+ *   micro        — badge / tag text (10)
+ *
+ * Pre-composed patterns:
+ *   sectionLabel — the uppercase small-caps label used above content groups
+ */
+export const typography = {
+  sizes: {
+    pageHeading: 26,
+    cardTitle:   16,
+    body:        15,
+    bodySmall:   13,
+    label:       11,
+    micro:       10,
+  },
+  weights: {
+    black:    '900' as const,
+    heavy:    '800' as const,
+    bold:     '700' as const,
+    semibold: '600' as const,
+    medium:   '500' as const,
+  },
+  /** Standard small-caps section label — use this object spread in StyleSheet */
+  sectionLabel: {
+    fontSize:      11,
+    fontWeight:    '700' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.8,
+  },
+} as const;
+

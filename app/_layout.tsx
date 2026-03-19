@@ -6,8 +6,11 @@ import 'react-native-reanimated';
 import { ThemeProvider, useAppTheme } from '@/context/ThemeContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { MealPlanProvider } from '@/context/MealPlanContext';
+import { WorkoutPlanProvider } from '@/context/WorkoutPlanContext';
 import { WeeklyPlanProvider } from '@/context/WeeklyPlanContext';
+import { UserProfileProvider, useUserProfile } from '@/context/UserProfileContext';
 import { scheduleAllReminders } from '@/utils/notifications';
+import { pruneOldLogs } from '@/utils/pruneStorage';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export const unstable_settings = {
@@ -51,6 +54,7 @@ function AuthGate() {
 
 function AppNavigator() {
   const { theme, isDark } = useAppTheme();
+  const { profile } = useUserProfile();
 
   const navTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),
@@ -64,8 +68,13 @@ function AppNavigator() {
   };
 
   useEffect(() => {
-    scheduleAllReminders().catch(() => {});
+    pruneOldLogs().catch((err) => console.warn('[Layout] pruneOldLogs:', err));
   }, []);
+
+  // Re-schedule notifications whenever the profile changes (e.g. sleep time updated)
+  useEffect(() => {
+    scheduleAllReminders(profile).catch((err) => console.warn('[Layout] scheduleAllReminders:', err));
+  }, [profile]);
 
   return (
     <NavThemeProvider value={navTheme}>
@@ -75,10 +84,12 @@ function AppNavigator() {
         <Stack.Screen name="(auth)"          options={{ headerShown: false }} />
         <Stack.Screen name="(onboarding)"    options={{ headerShown: false }} />
         <Stack.Screen name="biometric-gate"  options={{ headerShown: false }} />
-        <Stack.Screen name="day/[id]"   options={{ headerShown: false }} />
+        <Stack.Screen name="day/[id]"        options={{ headerShown: false }} />
         <Stack.Screen name="feedback"        options={{ headerShown: false }} />
-        <Stack.Screen name="grocery"          options={{ headerShown: false }} />
         <Stack.Screen name="settings"        options={{ headerShown: false }} />
+        <Stack.Screen name="food-preferences" options={{ headerShown: false }} />
+        <Stack.Screen name="my-schedule"      options={{ headerShown: false }} />
+        <Stack.Screen name="my-health"        options={{ headerShown: false }} />
         <Stack.Screen name="auth/callback"   options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -91,11 +102,15 @@ export default function RootLayout() {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <MealPlanProvider>
-            <WeeklyPlanProvider>
-              <AppNavigator />
-            </WeeklyPlanProvider>
-          </MealPlanProvider>
+          <UserProfileProvider>
+            <MealPlanProvider>
+              <WorkoutPlanProvider>
+              <WeeklyPlanProvider>
+                <AppNavigator />
+              </WeeklyPlanProvider>
+              </WorkoutPlanProvider>
+            </MealPlanProvider>
+          </UserProfileProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

@@ -23,6 +23,8 @@
 
 import { UserProfile } from '@/constants/userProfile';
 import { DaySchedule, ScheduleEvent } from '@/constants/scheduleData';
+import { getMorningSupplementDetail, getEveningSupplementDetail } from '@/constants/supplementsData';
+import { WORKOUT_SPLITS, DEFAULT_WORKOUT_DETAIL } from '@/constants/exerciseDatabase';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,73 +38,9 @@ const MON_FIRST_SHORT: readonly string[] = [
   'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN',
 ];
 
-/** Workout splits assigned in sequence to gym days. */
-const GYM_SPLITS = [
-  { workoutType: 'Upper Push',  workoutFocus: 'Chest · Shoulders · Triceps' },
-  { workoutType: 'Lower Body',  workoutFocus: 'Glutes · Quads · Hamstrings' },
-  { workoutType: 'Upper Pull',  workoutFocus: 'Back · Biceps · Rear Delts'  },
-  { workoutType: 'HIIT + Core', workoutFocus: 'Cardio · Abs · Obliques'     },
-  { workoutType: 'Full Body',   workoutFocus: 'Compound Lifts · Strength'   },
-] as const;
-
-type GymSplit = (typeof GYM_SPLITS)[number];
+type GymSplit = (typeof WORKOUT_SPLITS)[number];
 
 const GYM_DURATION_MINS = 75;
-
-/** Exercise detail strings — bullets are rendered as interactive checkboxes in the app. */
-const WORKOUT_DETAIL: Record<string, string> = {
-  'Upper Push':
-    'Warm-up: 5 min treadmill + arm circles\n' +
-    '• Barbell bench press: 4×8\n' +
-    '• Dumbbell shoulder press: 3×10\n' +
-    '• Incline dumbbell press: 3×12\n' +
-    '• Lateral raises: 3×15\n' +
-    '• Tricep rope pushdowns: 3×12\n' +
-    '• Overhead tricep extension: 3×12\n' +
-    'Cool-down: 5 min chest & shoulder stretch',
-  'Lower Body':
-    'Warm-up: 5 min bike or leg swings\n' +
-    '• Barbell squats: 4×8\n' +
-    '• Romanian deadlifts: 3×10\n' +
-    '• Hip thrusts: 4×12\n' +
-    '• Leg press: 3×15\n' +
-    '• Walking lunges: 3×12 each leg\n' +
-    '• Glute kickbacks (cable): 3×15\n' +
-    'Cool-down: 10 min stretch + foam roll',
-  'Upper Pull':
-    'Warm-up: 5 min row machine + shoulder circles\n' +
-    '• Lat pulldown: 4×10\n' +
-    '• Seated cable row: 3×12\n' +
-    '• Single-arm dumbbell row: 3×10 each\n' +
-    '• Face pulls (cable): 3×15\n' +
-    '• Rear delt fly (dumbbells): 3×12\n' +
-    '• Bicep curls (barbell): 3×10\n' +
-    '• Hammer curls: 3×12\n' +
-    'Cool-down: 10 min lat & bicep stretch',
-  'HIIT + Core':
-    'Warm-up: 5 min jog\n' +
-    'HIIT — 30s on / 15s off × 5 rounds:\n' +
-    '• Burpees\n' +
-    '• Jump squats\n' +
-    '• Mountain climbers\n' +
-    '• High knees\n' +
-    'Core block:\n' +
-    '• Plank: 4×45s\n' +
-    '• Cable crunches: 3×15\n' +
-    '• Hanging knee raises: 3×12\n' +
-    '• Russian twists: 3×20\n' +
-    'Cool-down: 10 min stretching + deep breathing',
-  'Full Body':
-    'Warm-up: 8 min full-body dynamic warm-up\n' +
-    '• Deadlifts: 4×6 (heavy)\n' +
-    '• Barbell back squat: 3×8\n' +
-    '• Bench press: 3×8\n' +
-    '• Dumbbell lunges: 3×12 each leg\n' +
-    '• Pull-ups or lat pulldown: 3×10\n' +
-    '• Shoulder press: 3×10\n' +
-    '• Farmer\'s carries: 3×30m\n' +
-    'Cool-down: 10 min full-body stretch',
-};
 
 // ─── Time helpers ─────────────────────────────────────────────────────────────
 
@@ -141,16 +79,17 @@ function gapMins(from: string, to: string): number {
 // ─── Event builder helpers ────────────────────────────────────────────────────
 
 function pushGymEvents(
-  events:   ScheduleEvent[],
-  gymTime:  string,
-  gymSplit: GymSplit | null,
+  events:         ScheduleEvent[],
+  gymTime:        string,
+  gymSplit:       GymSplit | null,
+  workoutContent: Record<string, string>,
 ): void {
   events.push({
     time:         gymTime,
     label:        `GYM – ${gymSplit?.workoutType ?? 'Training'}`,
     type:         'gym',
     duration:     `${GYM_DURATION_MINS} min`,
-    detail:       gymSplit ? (WORKOUT_DETAIL[gymSplit.workoutType] ?? '') : '',
+    detail:       gymSplit ? (workoutContent[gymSplit.workoutType] ?? '') : '',
     workoutType:  gymSplit?.workoutType,
     workoutFocus: gymSplit?.workoutFocus,
   });
@@ -168,15 +107,17 @@ function pushGymEvents(
 // ─── Event builder ────────────────────────────────────────────────────────────
 
 function buildDayEvents(
-  wakeTime:    string,
-  sleepTime:   string,
-  isWorkDay:   boolean,
-  workStart:   string,
-  workEnd:     string,
-  isGymDay:    boolean,
-  gymSplit:    GymSplit | null,
-  isSaturday:  boolean,
-  isSunday:    boolean,
+  wakeTime:       string,
+  sleepTime:      string,
+  isWorkDay:      boolean,
+  workStart:      string,
+  workEnd:        string,
+  isGymDay:       boolean,
+  gymSplit:       GymSplit | null,
+  isSaturday:     boolean,
+  isSunday:       boolean,
+  profile:        UserProfile,
+  workoutContent: Record<string, string>,
 ): ScheduleEvent[] {
   const events: ScheduleEvent[] = [];
 
@@ -214,7 +155,7 @@ function buildDayEvents(
     time:   addMins(wakeTime, 15),
     label:  'Supplements',
     type:   'supplement',
-    detail: 'Vitamin D3 (2000 IU) + Omega-3 (1g fish oil). D3 supports immunity, mood and testosterone — most people are deficient without realising. Omega-3 reduces inflammation and accelerates muscle repair. Both are fat-soluble, so take with food.',
+    detail: getMorningSupplementDetail(profile),
   });
 
   // ── Breakfast (meal slot 1) ──────────────────────────────────────────────────
@@ -228,7 +169,7 @@ function buildDayEvents(
 
   // ── Gym early + post-workout shake ──────────────────────────────────────────
   if (isGymDay && gymEarly && gymTime) {
-    pushGymEvents(events, gymTime, gymSplit);
+    pushGymEvents(events, gymTime, gymSplit, workoutContent);
   }
 
   // ── Lunch (meal slot 2) ─────────────────────────────────────────────────────
@@ -280,15 +221,6 @@ function buildDayEvents(
     });
 
     events.push({
-      time:       addMins(workEnd, -60),
-      label:      'Pre-sleep snack',
-      type:       'snack',
-      recipeId:   'cottage-cheese',
-      recipeType: 'meal',
-      detail:     'Light and easy to digest. Won\'t disrupt sleep or recovery.',
-    });
-
-    events.push({
       time:   workEnd,
       label:  'WORK ENDS',
       type:   'work',
@@ -297,8 +229,20 @@ function buildDayEvents(
 
     // ── Gym post-work + shake ─────────────────────────────────────────────────
     if (isGymDay && !gymEarly && gymTime) {
-      pushGymEvents(events, gymTime, gymSplit);
+      pushGymEvents(events, gymTime, gymSplit, workoutContent);
     }
+
+    // Pre-sleep snack: always 90 min before sleep so it never lands before gym
+    // (prior bug: preWorkEnd cap would place snack before post-work gym session).
+    const snackMins = timeToMins(sleepTime) - 90;
+    events.push({
+      time:       minsToTime(snackMins),
+      label:      'Pre-sleep snack',
+      type:       'snack',
+      recipeId:   'cottage-cheese',
+      recipeType: 'meal',
+      detail:     'Light and easy to digest. Won\'t disrupt sleep or recovery.',
+    });
   } else {
     // ── Non-work day ─────────────────────────────────────────────────────────
 
@@ -344,12 +288,12 @@ function buildDayEvents(
     });
   }
 
-  // ── Magnesium ───────────────────────────────────────────────────────────────
+  // ── Pre-sleep supplements ────────────────────────────────────────────────────
   events.push({
     time:   addMins(sleepTime, -30),
-    label:  'Magnesium supplement',
+    label:  'Supplements',
     type:   'supplement',
-    detail: 'Magnesium Glycinate (300mg) + final glass of water. Magnesium reduces muscle tension, deepens sleep quality and supports recovery overnight. Glycinate is the most bioavailable form — far better absorbed than oxide and gentle on the stomach.',
+    detail: getEveningSupplementDetail(profile),
   });
 
   // ── Wind down ───────────────────────────────────────────────────────────────
@@ -385,10 +329,16 @@ function buildDayEvents(
 /**
  * Builds a Mon-first DaySchedule[7] from a UserProfile.
  *
+ * @param workoutContent Optional map of split name → detail string injected
+ *   from WorkoutPlanContext. Falls back to WORKOUT_DETAIL constants when absent.
+ *
  * Call this once per week (or when the profile changes) and use the result
  * as the base schedule for buildOverlaySchedule in WeeklyPlanContext.
  */
-export function generateScheduleSkeleton(profile: UserProfile): DaySchedule[] {
+export function generateScheduleSkeleton(
+  profile:        UserProfile,
+  workoutContent: Record<string, string> = DEFAULT_WORKOUT_DETAIL,
+): DaySchedule[] {
   let gymSplitIdx = 0;
 
   return Array.from({ length: 7 }, (_, monFirstIdx): DaySchedule => {
@@ -404,7 +354,7 @@ export function generateScheduleSkeleton(profile: UserProfile): DaySchedule[] {
     const workStart = dayProfile?.workStart ?? '9:00 AM';
     const workEnd   = dayProfile?.workEnd   ?? '5:00 PM';
 
-    const gymSplit    = isGymDay ? GYM_SPLITS[gymSplitIdx++ % GYM_SPLITS.length] : null;
+    const gymSplit    = isGymDay ? WORKOUT_SPLITS[gymSplitIdx++ % WORKOUT_SPLITS.length] : null;
     const isRestDay   = !isGymDay && !isWorkDay;
     const isSaturday  = monFirstIdx === 5;
 
@@ -419,6 +369,8 @@ export function generateScheduleSkeleton(profile: UserProfile): DaySchedule[] {
       isGymDay, gymSplit,
       isSaturday,
       isSunday,
+      profile,
+      workoutContent,
     );
 
     return {

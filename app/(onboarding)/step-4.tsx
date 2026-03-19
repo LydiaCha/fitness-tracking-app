@@ -8,7 +8,7 @@ import { AppThemeType } from '@/constants/theme';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { ActivityLevel, ACTIVITY_LABELS } from '@/constants/userProfile';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 7;
 
 const ACTIVITY_OPTIONS: { value: ActivityLevel; emoji: string; desc: string }[] = [
   { value: 'sedentary',  emoji: '🛋️', desc: 'Little or no exercise, desk job' },
@@ -85,7 +85,7 @@ const styles = (theme: AppThemeType) => StyleSheet.create({
   progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: theme.border },
   progressDotActive: { backgroundColor: theme.primary },
   emoji:   { fontSize: 48, marginTop: 16 },
-  heading: { fontSize: 28, fontWeight: '700', color: theme.textPrimary, marginTop: 8 },
+  heading: { fontSize: 26, fontWeight: '700', color: theme.textPrimary, marginTop: 8 },
   sub:     { fontSize: 16, color: theme.textMuted, lineHeight: 22, marginBottom: 20 },
   options: { gap: 10, marginBottom: 24 },
   option: {

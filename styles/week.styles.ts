@@ -1,8 +1,7 @@
-import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { AppThemeType } from '@/constants/theme';
 
-export function createPlanStyles(theme: AppThemeType) {
+export function createWeekStyles(theme: AppThemeType) {
   return StyleSheet.create({
     safe:          { flex: 1, backgroundColor: theme.bg },
     scroll:        { flex: 1 },
@@ -24,7 +23,7 @@ export function createPlanStyles(theme: AppThemeType) {
     },
     segmentPill: {
       flex: 1,
-      paddingVertical: 8,
+      paddingVertical: 6,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
@@ -33,7 +32,7 @@ export function createPlanStyles(theme: AppThemeType) {
       backgroundColor: theme.primary,
     },
     segmentText: {
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '600',
       color: theme.textMuted,
     },
@@ -57,41 +56,57 @@ export function createPlanStyles(theme: AppThemeType) {
     },
     weekNavRow: {
       flexDirection: 'row',
-      backgroundColor: theme.bgCardAlt,
-      borderRadius: 10,
-      padding: 3,
-      gap: 2,
+      gap: 16,
+      marginBottom: 2,
     },
     weekNavBtn: {
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      borderRadius: 8,
+      paddingBottom: 6,
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
     },
     weekNavBtnActive: {
-      backgroundColor: theme.primary,
+      borderBottomColor: theme.gym,
     },
     weekNavBtnText: {
-      fontSize: 12,
-      fontWeight: '700',
+      fontSize: 13,
+      fontWeight: '600',
       color: theme.textMuted,
     },
     weekNavBtnTextActive: {
-      color: '#fff',
+      color: theme.textPrimary,
+      fontWeight: '700',
+    },
+    weekNavSwipeHint: {
+      fontSize: 11,
+      color: theme.textMuted,
+      marginBottom: 12,
     },
 
     adjustPrefsRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 18,
+      marginBottom: 10,
     },
     adjustPrefsText: {
       fontSize: 12,
       color: theme.textMuted,
     },
-    adjustPrefsLink: {
+    adjustCtaRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 18,
+    },
+    adjustCtaBtn: {
+      flex: 1,
+      paddingVertical: 9,
+      borderRadius: 10,
+      alignItems: 'center',
+      backgroundColor: theme.bgCardAlt,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    adjustCtaText: {
       fontSize: 12,
-      color: theme.primary,
-      fontWeight: '600',
+      fontWeight: '700',
+      color: theme.textSecondary,
     },
 
     // Week strip
@@ -110,11 +125,11 @@ export function createPlanStyles(theme: AppThemeType) {
       borderColor: theme.border,
     },
     weekDayPillToday: {
-      backgroundColor: theme.primary,
-      borderColor: theme.primary,
+      backgroundColor: theme.meal,
+      borderColor: theme.meal,
     },
     weekDayPillPast: {
-      opacity: 0.45,
+      opacity: 0.5,
     },
     weekDayPillName: {
       fontSize: 10,
@@ -152,7 +167,7 @@ export function createPlanStyles(theme: AppThemeType) {
     progressBarFill: {
       height: 6,
       borderRadius: 3,
-      backgroundColor: theme.primary,
+      backgroundColor: theme.meal,
     },
 
     errorBanner: {
@@ -180,7 +195,7 @@ export function createPlanStyles(theme: AppThemeType) {
       overflow: 'hidden',
     },
     dayCardToday: {
-      borderColor: theme.primary,
+      borderColor: theme.meal,
       borderWidth: 1.5,
     },
     dayHeader: {
@@ -192,10 +207,10 @@ export function createPlanStyles(theme: AppThemeType) {
       gap: 6,
     },
     dayHeaderToday: {
-      backgroundColor: theme.primary + '16',
+      backgroundColor: theme.meal + '16',
     },
     dayName: {
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '800',
       color: theme.textPrimary,
     },
@@ -206,10 +221,10 @@ export function createPlanStyles(theme: AppThemeType) {
       flex: 1,
     },
     todayBadge: {
-      backgroundColor: theme.primary,
+      backgroundColor: theme.meal,
       borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
       marginRight: 4,
     },
     todayBadgeText: {
@@ -223,13 +238,15 @@ export function createPlanStyles(theme: AppThemeType) {
       color: theme.textMuted,
       fontWeight: '600',
     },
+    dayChevron:     { fontSize: 14, color: theme.textMuted, marginLeft: 4 },
+    dayChevronOpen: { transform: [{ rotate: '90deg' }] },
     mealEntryRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 14,
       paddingVertical: 11,
       borderTopWidth: 1,
-      borderTopColor: theme.border + '66',
+      borderTopColor: theme.border + '55',
       gap: 10,
     },
     mealTypePill: {
@@ -278,10 +295,11 @@ export function createPlanStyles(theme: AppThemeType) {
       color: theme.textSecondary,
     },
     mealExpandArrow: {
-      fontSize: 11,
+      fontSize: 14,
       color: theme.textMuted,
       paddingLeft: 4,
     },
+    mealExpandArrowOpen: { transform: [{ rotate: '90deg' }] },
     mealExpandedSection: {
       paddingHorizontal: 14,
       paddingBottom: 14,
@@ -307,25 +325,17 @@ export function createPlanStyles(theme: AppThemeType) {
       color: theme.textSecondary,
       lineHeight: 19,
     },
-    mealTipBox: {
-      marginTop: 10,
-      backgroundColor: theme.bgCardAlt,
-      borderRadius: 8,
-      padding: 10,
-      borderLeftWidth: 3,
-      borderLeftColor: theme.primary,
-    },
-    mealTipText: {
-      fontSize: 12,
-      color: theme.textSecondary,
-      lineHeight: 18,
-    },
+    mealTipBox: { backgroundColor: theme.meal + '18', borderRadius: 8, padding: 10, marginTop: 10, borderWidth: 1, borderColor: theme.meal + '40' },
+    mealTipText: { fontSize: 12, color: theme.meal, lineHeight: 17 },
+
+    groceryBackBtn:     { alignSelf: 'flex-start', marginBottom: 16 },
+    groceryBackBtnText: { fontSize: 14, fontWeight: '700' },
 
     // Grocery preview card (gradient banner on the weekly plan)
     grocerySectionRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      borderRadius: 18,
+      borderRadius: 20,
       overflow: 'hidden',
       paddingHorizontal: 16,
       paddingVertical: 16,
@@ -352,7 +362,7 @@ export function createPlanStyles(theme: AppThemeType) {
     grocerySectionEmoji: { fontSize: 22 },
     grocerySectionTitle: {
       flex: 1,
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '700',
       color: '#ffffff',
     },
@@ -395,7 +405,7 @@ export function createPlanStyles(theme: AppThemeType) {
       marginBottom: 16,
     },
     emptyBtn: {
-      backgroundColor: theme.primary,
+      backgroundColor: theme.meal,
       borderRadius: 10,
       paddingHorizontal: 20,
       paddingVertical: 10,
@@ -592,7 +602,7 @@ export function createPlanStyles(theme: AppThemeType) {
       color: theme.success,
     },
     itemRowAtHome: {
-      opacity: 0.38,
+      opacity: 0.35,
     },
 
     // Legacy fields kept for compatibility
@@ -655,7 +665,7 @@ export function createPlanStyles(theme: AppThemeType) {
     },
     sectionTitle: {
       flex: 1,
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '700',
       color: theme.textPrimary,
     },
@@ -682,6 +692,7 @@ export function createPlanStyles(theme: AppThemeType) {
       color: theme.textMuted,
       marginLeft: 4,
     },
+    chevronOpen: { transform: [{ rotate: '90deg' }] },
     divider: {
       height: 1,
       backgroundColor: theme.border,
@@ -695,7 +706,7 @@ export function createPlanStyles(theme: AppThemeType) {
       gap: 12,
     },
     itemRowChecked: {
-      opacity: 0.38,
+      opacity: 0.35,
     },
     itemRowSep: {
       height: 1,
@@ -740,9 +751,9 @@ export function createPlanStyles(theme: AppThemeType) {
       color: theme.textSecondary,
     },
 
-    // ── Habits segment ─────────────────────────────────────────────────────
+    // ── Workout / Training segment ──────────────────────────────────────────
 
-    progressCard: {
+    woSummaryCard: {
       backgroundColor: theme.bgCard,
       borderRadius: 16,
       padding: 16,
@@ -750,182 +761,165 @@ export function createPlanStyles(theme: AppThemeType) {
       borderWidth: 1,
       borderColor: theme.border,
     },
-    progressHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: 12,
-    },
-    progressTitle: {
+    woSummaryTitle: {
       fontSize: 16,
-      fontWeight: '700',
-      color: theme.textPrimary,
-    },
-    progressDate: {
-      fontSize: 12,
-      color: theme.textMuted,
-      marginTop: 2,
-    },
-    progressPct: {
-      fontSize: 36,
       fontWeight: '800',
-    },
-    habitProgressBarBg: {
-      height: 8,
-      backgroundColor: theme.bgCardAlt,
-      borderRadius: 4,
-      overflow: 'hidden',
-      marginBottom: 8,
-    },
-    habitProgressBarFill: {
-      height: 8,
-      borderRadius: 4,
-    },
-    progressCount: {
-      fontSize: 12,
-      color: theme.textSecondary,
-    },
-    perfectText: {
-      fontSize: 13,
-      color: theme.meal,
-      fontWeight: '600',
-      marginTop: 6,
-    },
-    card: {
-      backgroundColor: theme.bgCard,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    cardTitle: {
-      fontSize: 16,
-      fontWeight: '700',
       color: theme.textPrimary,
-      marginBottom: 10,
+      marginBottom: 2,
     },
-    cardSubtitle: {
+    woSummaryMeta: {
       fontSize: 12,
       color: theme.textMuted,
       marginBottom: 14,
-      marginTop: -6,
     },
-    habitRow: {
+    woDayPillRow: {
       flexDirection: 'row',
+      gap: 6,
+    },
+    woSummaryDayPill: {
+      flex: 1,
       alignItems: 'center',
-      gap: 10,
-      paddingVertical: 11,
-      paddingHorizontal: 12,
-      borderRadius: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      gap: 4,
+    },
+    woSummaryDayText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    woSummaryDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+    },
+
+    woDayCard: {
+      backgroundColor: theme.bgCard,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: theme.border,
-      marginBottom: 8,
-      backgroundColor: theme.bgCardAlt,
+      marginBottom: 10,
+      overflow: 'hidden',
     },
-    habitCheck: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      borderWidth: 2,
-      borderColor: theme.border,
+    woDayCardToday: {
+      borderColor: theme.gym,
+      borderWidth: 1.5,
+    },
+    woDayCardDone: {
+      opacity: 0.5,
+    },
+    woDayHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+      gap: 10,
+    },
+    woDayBadge: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    habitCheckMark: {
-      fontSize: 12,
-      color: '#fff',
+    woDayBadgeText: {
+      fontSize: 10,
       fontWeight: '800',
+      letterSpacing: 0.5,
     },
-    habitEmoji: {
-      fontSize: 18,
-    },
-    habitLabel: {
-      flex: 1,
+    woWorkoutType: {
       fontSize: 14,
-      color: theme.textSecondary,
-      fontWeight: '500',
+      fontWeight: '700',
+      color: theme.textPrimary,
     },
-    streakBadge: {
+    woTodayBadge: {
+      backgroundColor: theme.gym,
+      borderRadius: 6,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+    },
+    woTodayBadgeText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: '#fff',
+      letterSpacing: 0.5,
+    },
+    woCompletedCheck: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    woMuscles: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginTop: 1,
+    },
+    woDurPill: {
       borderRadius: 8,
       paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingVertical: 4,
       borderWidth: 1,
     },
-    streakText: {
+    woDurText: {
       fontSize: 11,
       fontWeight: '700',
     },
-    gridHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 8,
+    woChevron: {
+      fontSize: 14,
+      color: theme.textMuted,
     },
-    gridHabitLabel: {
-      width: 32,
+    woChevronOpen: { transform: [{ rotate: '90deg' }] },
+
+    woExerciseBlock: {
+      paddingHorizontal: 14,
+      paddingBottom: 14,
+      paddingTop: 2,
+      borderTopWidth: 1,
+      borderTopColor: theme.border + '55',
+      gap: 2,
     },
-    gridDayCell: {
-      flex: 1,
-      alignItems: 'center',
-    },
-    gridDayText: {
+    woExerciseSectionLabel: {
       fontSize: 10,
+      fontWeight: '700',
       color: theme.textMuted,
-      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginTop: 10,
+      marginBottom: 4,
     },
-    gridDateText: {
-      fontSize: 9,
-      color: theme.textMuted,
-      marginTop: 1,
-    },
-    gridRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 10,
-    },
-    gridHabitEmoji: {
-      fontSize: 16,
-    },
-    gridDot: {
-      width: 18,
-      height: 18,
-      borderRadius: 9,
-      backgroundColor: theme.bgCardAlt,
-    },
-    streakRow: {
+    woExerciseRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      marginBottom: 10,
+      paddingVertical: 4,
     },
-    streakEmoji: {
-      fontSize: 16,
-      width: 24,
+    woExerciseDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      flexShrink: 0,
     },
-    streakHabitLabel: {
+    woExerciseText: {
+      flex: 1,
+      fontSize: 13,
+      color: theme.textSecondary,
+      lineHeight: 18,
+    },
+
+    woRestNote: {
+      paddingHorizontal: 14,
+      paddingBottom: 12,
+      paddingTop: 2,
+      borderTopWidth: 1,
+      borderTopColor: theme.border + '55',
+    },
+    woRestNoteText: {
       fontSize: 12,
       color: theme.textSecondary,
-      width: 130,
-    },
-    streakBarBg: {
-      flex: 1,
-      height: 6,
-      backgroundColor: theme.bgCardAlt,
-      borderRadius: 3,
-      overflow: 'hidden',
-    },
-    streakBarFill: {
-      height: 6,
-      borderRadius: 3,
-    },
-    streakDays: {
-      fontSize: 12,
-      fontWeight: '700',
-      width: 28,
-      textAlign: 'right',
+      lineHeight: 18,
     },
 
   });
 }
 
-export type PlanStyles = ReturnType<typeof createPlanStyles>;
+export type WeekStyles = ReturnType<typeof createWeekStyles>;
