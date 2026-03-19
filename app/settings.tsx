@@ -138,7 +138,7 @@ export default function SettingsScreen() {
             <Text style={s.rowIcon}>💬</Text>
             <View style={{ flex: 1 }}>
               <Text style={s.rowLabel}>Send feedback</Text>
-              <Text style={s.rowSub}>Share a rating and message</Text>
+              <Text style={s.rowSub}>Report a bug or suggest a feature</Text>
             </View>
             <Text style={s.chevron}>›</Text>
           </TouchableOpacity>

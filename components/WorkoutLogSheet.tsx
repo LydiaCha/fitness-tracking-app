@@ -10,13 +10,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, Modal, ScrollView, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Vibration,
+  TextInput, KeyboardAvoidingView, Platform, Alert,
+  ActivityIndicator, Vibration, Dimensions, Share,
 } from 'react-native';
-import { Share } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
 import { AppThemeType } from '@/constants/theme';
+import { ExerciseInfoSheet } from '@/components/ExerciseInfoSheet';
 import {
   SetRecord, WorkoutLog, calcE1RM,
   getLastSets, saveWorkoutLog, loadTodayLog,
@@ -42,12 +43,10 @@ interface SetDraft {
 }
 
 interface ExerciseState {
-  exerciseId:     string;
-  sets:           SetDraft[];
-  expanded:       boolean;
-  lastSets:       SetRecord[];
-  swapLoading:    boolean;
-  swapSuggestion: { exercise: Exercise; reason: string } | null;
+  exerciseId: string;
+  sets:       SetDraft[];
+  expanded:   boolean;
+  lastSets:   SetRecord[];
 }
 
 interface ExerciseBrief {
@@ -118,10 +117,11 @@ function countFilled(states: ExerciseState[]): number {
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 
 function Stepper({
-  value, step, min, max, unit, onChange, theme, color,
+  value, step, min, max, unit, onChange, theme, color, width,
 }: {
   value: number; step: number; min: number; max: number;
   unit: string; onChange: (v: number) => void; theme: AppThemeType; color: string;
+  width?: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [text,    setText]    = useState('');
@@ -137,10 +137,10 @@ function Stepper({
     return (
       <TextInput
         style={{
-          width: 80, height: 40, borderRadius: 12,
+          width: 90, height: 42, borderRadius: 12,
           borderWidth: 1.5, borderColor: color,
           backgroundColor: theme.bgCardAlt,
-          color: theme.textPrimary, fontSize: 17,
+          color: theme.textPrimary, fontSize: 16,
           fontWeight: '700', textAlign: 'center',
         }}
         value={text}
@@ -155,46 +155,48 @@ function Stepper({
     );
   }
 
+  // Merged pill: [−  |  value\nunit  |  +]
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+    <View style={{
+      flexDirection: 'row', height: 52, borderRadius: 12,
+      borderWidth: 1, borderColor: hasValue ? color : theme.border,
+      backgroundColor: hasValue ? color + '12' : theme.bgCardAlt,
+      overflow: 'hidden',
+      ...(width ? { width } : { flex: 1 }),
+    }}>
       <TouchableOpacity
         onPress={() => onChange(+Math.max(min, value - step).toFixed(1))}
-        hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-        style={{
-          width: 28, height: 28, borderRadius: 14,
-          alignItems: 'center', justifyContent: 'center',
-          borderWidth: 1.5,
-          borderColor: hasValue ? color + '55' : theme.border,
-        }}>
-        <Text style={{ fontSize: 18, color: hasValue ? color : theme.textMuted, lineHeight: 22, marginTop: -2 }}>−</Text>
+        hitSlop={{ top: 4, bottom: 4, left: 4, right: 0 }}
+        style={{ width: 36, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 22, color: hasValue ? color : theme.textMuted, lineHeight: 26, marginTop: -1 }}>−</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         onLongPress={() => { setText(value > 0 ? String(value) : ''); setEditing(true); }}
         delayLongPress={400}
         style={{
-          minWidth: 68, height: 40, paddingHorizontal: 8,
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: hasValue ? color + '15' : theme.bgCardAlt,
-          borderRadius: 10,
-          borderWidth: 1, borderColor: hasValue ? color + '35' : theme.border,
+          flex: 1, alignItems: 'center', justifyContent: 'center',
+          borderLeftWidth: 1, borderRightWidth: 1, borderColor: hasValue ? color + '40' : theme.border,
         }}>
-        <Text style={{ fontSize: 17, fontWeight: '800', color: hasValue ? theme.textPrimary : theme.textMuted }}>
-          {value > 0 ? `${value}${unit}` : '—'}
-        </Text>
+        {value > 0 ? (
+          <>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: theme.textPrimary, lineHeight: 20 }}>
+              {value}
+            </Text>
+            <Text style={{ fontSize: 10, color: color, fontWeight: '600', letterSpacing: 0.5, marginTop: 1 }}>
+              {unit.trim().toUpperCase()}
+            </Text>
+          </>
+        ) : (
+          <Text style={{ fontSize: 14, color: theme.textMuted }}>—</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity
         onPress={() => onChange(+Math.min(max, value + step).toFixed(1))}
-        hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-        style={{
-          width: 28, height: 28, borderRadius: 14,
-          alignItems: 'center', justifyContent: 'center',
-          borderWidth: 1.5,
-          borderColor: hasValue ? color + '55' : theme.border,
-          backgroundColor: hasValue ? color + '10' : 'transparent',
-        }}>
-        <Text style={{ fontSize: 18, color: hasValue ? color : theme.textMuted, lineHeight: 22, marginTop: -2 }}>+</Text>
+        hitSlop={{ top: 4, bottom: 4, left: 0, right: 4 }}
+        style={{ width: 36, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 22, color: hasValue ? color : theme.textMuted, lineHeight: 26, marginTop: -1 }}>+</Text>
       </TouchableOpacity>
     </View>
   );
@@ -203,64 +205,50 @@ function Stepper({
 // ─── SetRow ───────────────────────────────────────────────────────────────────
 
 function SetRow({
-  set, index, coachWeight, theme, onChange, onDelete, onMarkDone,
+  set, coachWeight, theme, onChange, onDelete, onMarkDone,
 }: {
   set:          SetDraft;
-  index:        number;
   coachWeight?: number;
   theme:        AppThemeType;
   onChange:     (field: 'weightKg' | 'reps', val: number) => void;
   onDelete:     () => void;
   onMarkDone:   () => void;
 }) {
-  const color       = theme.gym ?? '#a855f7';
+  const color       = theme.gym;
   const isUnstarted = !set.done && set.weightKg === 0 && set.reps === 0;
 
   return (
     <View style={{ marginBottom: 8 }}>
       {coachWeight && isUnstarted && (
-        <Text style={{ fontSize: 11, color, marginBottom: 3, marginLeft: 36, fontWeight: '600', opacity: 0.85 }}>
+        <Text style={{ fontSize: 11, color, marginBottom: 3, fontWeight: '600', opacity: 0.85 }}>
           ✦ Coach: {coachWeight} kg target
         </Text>
       )}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, opacity: set.done ? 0.45 : 1 }}>
-        {/* Set number badge */}
-        <View style={{
-          width: 26, height: 26, borderRadius: 13,
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: set.done ? theme.success + '22' : color + '15',
-          borderWidth: 1, borderColor: set.done ? theme.success + '55' : color + '30',
-        }}>
-          {set.done
-            ? <Text style={{ fontSize: 11, color: theme.success, fontWeight: '900' }}>✓</Text>
-            : <Text style={{ fontSize: 11, fontWeight: '700', color }}>{index + 1}</Text>
-          }
-        </View>
-
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, opacity: set.done ? 0.5 : 1 }}>
         <Stepper value={set.weightKg} step={2.5} min={0} max={300} unit=" kg"
           onChange={v => onChange('weightKg', v)} theme={theme} color={color} />
 
-        <Text style={{ fontSize: 14, color: theme.textMuted, fontWeight: '300', marginHorizontal: 2 }}>×</Text>
+        <Text style={{ fontSize: 13, color: theme.textMuted, fontWeight: '300' }}>×</Text>
 
         <Stepper value={set.reps} step={1} min={0} max={50} unit=" reps"
           onChange={v => onChange('reps', v)} theme={theme} color={color} />
 
-        {/* Done button */}
+        {/* Done button — red tint when done, neutral when pending */}
         <TouchableOpacity
           onPress={onMarkDone}
           hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
           style={{
-            width: 42, height: 42, borderRadius: 21,
+            width: 38, height: 38, borderRadius: 19,
             alignItems: 'center', justifyContent: 'center',
-            backgroundColor: set.done ? theme.success + '22' : theme.bgCardAlt,
+            backgroundColor: set.done ? color + '18' : theme.bgCardAlt,
             borderWidth: 1.5,
-            borderColor: set.done ? theme.success + '70' : theme.border,
+            borderColor: set.done ? color + '55' : theme.border,
           }}>
-          <Text style={{ fontSize: 18, color: set.done ? theme.success : theme.textMuted }}>✓</Text>
+          <Text style={{ fontSize: 17, color: set.done ? color : theme.textMuted }}>✓</Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={onDelete} hitSlop={{ top: 12, bottom: 12, left: 8, right: 4 }}>
-          <Text style={{ fontSize: 15, color: theme.border }}>✕</Text>
+          <Text style={{ fontSize: 14, color: theme.textMuted + '80' }}>✕</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -270,45 +258,49 @@ function SetRow({
 // ─── RestBanner ───────────────────────────────────────────────────────────────
 
 function RestBanner({
-  ctx, isCompound, onStart, onSkip, color, theme,
+  ctx, isCompound, onStart, onSkip, theme,
 }: {
   ctx:        RestCtx;
   isCompound: boolean;
   onStart:    () => void;
   onSkip:     () => void;
-  color:      string;
   theme:      AppThemeType;
 }) {
   const fmt = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
+  const cyan         = theme.secondary;
   const lastSetText  = `${ctx.lastSet.reps} × ${ctx.lastSet.weightKg} kg`;
   const nextSetLabel = `Set ${ctx.setIdx + 2}`;
 
   return (
     <View style={{
       marginHorizontal: 14, marginBottom: 12,
-      backgroundColor: color + '12', borderRadius: 12,
-      borderWidth: 1, borderColor: color + '30', padding: 12,
+      backgroundColor: theme.bgCardAlt, borderRadius: 12,
+      borderWidth: 1,
+      borderColor: ctx.phase === 'done' ? theme.success + '55' : theme.border,
+      padding: 12,
     }}>
       {ctx.phase === 'prompted' && (
         <>
-          <Text style={{ fontSize: 12, color: theme.textMuted, marginBottom: 8 }}>
+          <Text style={{ fontSize: 12, color: theme.success, fontWeight: '600', marginBottom: 6 }}>
             ✓ Set {ctx.setIdx + 1} done · {lastSetText}
-            {isCompound ? '  ·  Compound — rest 2 min recommended' : '  ·  Isolation — rest 75 s recommended'}
+          </Text>
+          <Text style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>
+            {isCompound ? 'Compound lift — 2 min rest recommended' : 'Isolation — 75 s rest recommended'}
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity onPress={onStart} activeOpacity={0.8} style={{
-              flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10,
-              backgroundColor: color + '22', borderWidth: 1, borderColor: color + '55',
+              flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 10,
+              backgroundColor: cyan + '20', borderWidth: 1, borderColor: cyan + '55',
             }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: cyan }}>
                 ⏱ Rest {fmt(ctx.recommended)}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onSkip} activeOpacity={0.8} style={{
-              paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
-              borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bgCardAlt,
+              paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10,
+              borderWidth: 1, borderColor: theme.border,
             }}>
               <Text style={{ fontSize: 13, color: theme.textMuted }}>Skip →</Text>
             </TouchableOpacity>
@@ -320,18 +312,18 @@ function RestBanner({
         <>
           <View style={{ marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
-              <Text style={{ fontSize: 44, fontWeight: '900', color, lineHeight: 50 }}>{fmt(ctx.secs)}</Text>
+              <Text style={{ fontSize: 44, fontWeight: '900', color: theme.textPrimary, lineHeight: 50 }}>{fmt(ctx.secs)}</Text>
               <Text style={{ fontSize: 12, color: theme.textMuted, marginBottom: 4 }}>remaining</Text>
             </View>
             <View style={{ height: 4, backgroundColor: theme.border, borderRadius: 2, overflow: 'hidden' }}>
-              <View style={{ height: 4, borderRadius: 2, backgroundColor: color, width: `${Math.round((ctx.secs / ctx.recommended) * 100)}%` }} />
+              <View style={{ height: 4, borderRadius: 2, backgroundColor: cyan, width: `${Math.round((ctx.secs / ctx.recommended) * 100)}%` }} />
             </View>
           </View>
           <TouchableOpacity onPress={onSkip} activeOpacity={0.8} style={{
             alignItems: 'center', paddingVertical: 9, borderRadius: 10,
-            borderWidth: 1, borderColor: color + '55', backgroundColor: color + '18',
+            borderWidth: 1, borderColor: cyan + '55', backgroundColor: cyan + '15',
           }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color }}>Start {nextSetLabel} now →</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: cyan }}>Start {nextSetLabel} now →</Text>
           </TouchableOpacity>
         </>
       )}
@@ -346,9 +338,9 @@ function RestBanner({
           </Text>
           <TouchableOpacity onPress={onSkip} activeOpacity={0.8} style={{
             alignItems: 'center', paddingVertical: 9, borderRadius: 10,
-            backgroundColor: color + '22', borderWidth: 1, borderColor: color + '55',
+            backgroundColor: theme.success + '20', borderWidth: 1, borderColor: theme.success + '55',
           }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color }}>💪 Let's go</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.success }}>💪 Let's go</Text>
           </TouchableOpacity>
         </>
       )}
@@ -359,42 +351,37 @@ function RestBanner({
 // ─── ExerciseSection ──────────────────────────────────────────────────────────
 
 function ExerciseSection({
-  state, brief, theme, restCtx,
+  state, brief, theme, restCtx, isActive,
   onToggleExpand, onSetChange, onAddSet, onDeleteSet, onMarkDone,
-  onRemove, onRequestSwap, onAcceptSwap, onDismissSwap,
-  onStartRest, onSkipRest,
+  onRemove, onStartRest, onSkipRest, onInfo,
 }: {
   state:          ExerciseState;
   brief?:         ExerciseBrief;
   theme:          AppThemeType;
   restCtx?:       RestCtx;
+  isActive:       boolean;
   onToggleExpand: () => void;
   onSetChange:    (si: number, field: 'weightKg' | 'reps', val: number) => void;
   onAddSet:       () => void;
   onDeleteSet:    (si: number) => void;
   onMarkDone:     (si: number) => void;
   onRemove:       () => void;
-  onRequestSwap:  () => void;
-  onAcceptSwap:   () => void;
-  onDismissSwap:  () => void;
   onStartRest:    () => void;
   onSkipRest:     () => void;
+  onInfo:         () => void;
 }) {
   const exercise  = getExerciseById(state.exerciseId);
   if (!exercise) return null;
 
-  const color      = theme.gym ?? '#a855f7';
-  const doneSets   = state.sets.filter(s => s.done).length;
-  const filledSets = state.sets.filter(s => s.weightKg > 0 && s.reps > 0).length;
-  const allDone    = state.sets.length > 0 && state.sets.every(s => s.done);
+  const color   = theme.gym;
+  const allDone = state.sets.length > 0 && state.sets.every(s => s.done);
 
   return (
     <View style={{
       backgroundColor: theme.bgCard,
       borderRadius: 16,
       borderWidth: 1,
-      borderLeftWidth: doneSets > 0 || state.expanded ? 3 : 1,
-      borderColor: allDone ? theme.success + '60' : doneSets > 0 ? color + '50' : state.expanded ? color + '50' : theme.border,
+      borderColor: isActive ? theme.gym : theme.border,
       marginBottom: 10,
       overflow: 'hidden',
     }}>
@@ -404,9 +391,12 @@ function ExerciseSection({
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={{ fontSize: 15, fontWeight: '700', color: theme.textPrimary }}>{exercise.name}</Text>
+            <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+              <Text style={{ fontSize: 13, color: theme.textMuted }}>ⓘ</Text>
+            </TouchableOpacity>
             {allDone && (
-              <View style={{ backgroundColor: theme.success + '20', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
-                <Text style={{ fontSize: 10, fontWeight: '800', color: theme.success }}>✓ DONE</Text>
+              <View style={{ backgroundColor: theme.bgCardAlt, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: theme.border }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: theme.textMuted }}>✓ DONE</Text>
               </View>
             )}
           </View>
@@ -424,7 +414,7 @@ function ExerciseSection({
             {state.sets.slice(0, 6).map((s, i) => (
               <View key={i} style={{
                 width: 8, height: 8, borderRadius: 4,
-                backgroundColor: s.done ? theme.success : s.weightKg > 0 && s.reps > 0 ? color + '60' : theme.border,
+                backgroundColor: s.done ? color : s.weightKg > 0 && s.reps > 0 ? color + '50' : color + '18',
               }} />
             ))}
             {state.sets.length > 6 && (
@@ -445,7 +435,6 @@ function ExerciseSection({
           isCompound={exercise.isCompound ?? false}
           onStart={onStartRest}
           onSkip={onSkipRest}
-          color={color}
           theme={theme}
         />
       )}
@@ -463,7 +452,7 @@ function ExerciseSection({
           {/* Set rows */}
           {state.sets.map((set, i) => (
             <SetRow
-              key={i} set={set} index={i} theme={theme}
+              key={i} set={set} theme={theme}
               coachWeight={brief && i === 0 ? brief.suggestedWeightKg : undefined}
               onChange={(field, val) => onSetChange(i, field, val)}
               onDelete={() => onDeleteSet(i)}
@@ -475,20 +464,9 @@ function ExerciseSection({
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
             <TouchableOpacity onPress={onAddSet} activeOpacity={0.7} style={{
               flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10,
-              borderWidth: 1, borderStyle: 'dashed', borderColor: color + '55',
-            }}>
-              <Text style={{ fontSize: 13, color, fontWeight: '600' }}>+ Add set</Text>
-            </TouchableOpacity>
-
-            {/* Swap exercise */}
-            <TouchableOpacity onPress={onRequestSwap} activeOpacity={0.7} style={{
-              paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
               borderWidth: 1, borderColor: theme.border,
-              flexDirection: 'row', alignItems: 'center', gap: 5,
             }}>
-              {state.swapLoading
-                ? <ActivityIndicator size="small" color={color} />
-                : <Text style={{ fontSize: 13, color: theme.textMuted }}>⇄ Swap</Text>}
+              <Text style={{ fontSize: 13, color: theme.textMuted, fontWeight: '500' }}>+ Add set</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={onRemove} activeOpacity={0.7} style={{
@@ -498,36 +476,6 @@ function ExerciseSection({
               <Text style={{ fontSize: 13, color: theme.textMuted }}>Remove</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Swap suggestion card */}
-          {state.swapSuggestion && (
-            <View style={{
-              backgroundColor: theme.bgCardAlt, borderRadius: 10,
-              padding: 12, marginTop: 10, gap: 6,
-            }}>
-              <Text style={{ fontSize: 12, color: theme.textSecondary }}>
-                Suggested:{' '}
-                <Text style={{ fontWeight: '700', color: theme.textPrimary }}>
-                  {state.swapSuggestion.exercise.name}
-                </Text>
-              </Text>
-              <Text style={{ fontSize: 11, color: theme.textMuted }}>{state.swapSuggestion.reason}</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                <TouchableOpacity onPress={onAcceptSwap} activeOpacity={0.8} style={{
-                  flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center',
-                  backgroundColor: color + '20', borderWidth: 1, borderColor: color + '55',
-                }}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color }}>Use it</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={onDismissSwap} activeOpacity={0.8} style={{
-                  paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8,
-                  backgroundColor: theme.bgCardAlt, borderWidth: 1, borderColor: theme.border,
-                }}>
-                  <Text style={{ fontSize: 12, color: theme.textMuted }}>Keep</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
         </View>
       )}
     </View>
@@ -573,7 +521,7 @@ function ExercisePicker({
   const [expanded,  setExpanded]  = useState<string | null>(null);
   const [justAdded, setJustAdded] = useState<string | null>(null);
 
-  const color    = theme.gym ?? '#a855f7';
+  const color    = theme.gym;
   const filtered = EXERCISES.filter(e => e.category === cat && !existingIds.includes(e.id));
 
   function handleAdd(ex: Exercise) {
@@ -653,11 +601,6 @@ function ExercisePicker({
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textPrimary }}>{ex.name}</Text>
-                    {ex.isCompound && (
-                      <View style={{ backgroundColor: color + '18', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
-                        <Text style={{ fontSize: 9, fontWeight: '700', color, textTransform: 'uppercase', letterSpacing: 0.5 }}>Compound</Text>
-                      </View>
-                    )}
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ fontSize: 11, color: theme.textMuted }}>{ex.primaryMuscle}</Text>
@@ -690,15 +633,15 @@ function ExercisePicker({
                 </TouchableOpacity>
               </TouchableOpacity>
 
-              {/* Coaching description */}
-              {isExpanded && (
+              {/* Quick form cue */}
+              {isExpanded && ex.cues.length > 0 && (
                 <View style={{
                   marginHorizontal: 20, marginBottom: 14,
-                  backgroundColor: color + '0e', borderRadius: 10,
-                  padding: 12, borderLeftWidth: 3, borderLeftColor: color + '55',
+                  backgroundColor: theme.bgCardAlt, borderRadius: 10,
+                  padding: 12, borderWidth: 1, borderColor: theme.border,
                 }}>
                   <Text style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 20 }}>
-                    {ex.coaching}
+                    {ex.cues[0]}
                   </Text>
                 </View>
               )}
@@ -712,23 +655,6 @@ function ExercisePicker({
 
 // ─── PostSession ──────────────────────────────────────────────────────────────
 
-function ShareButton({ message, color }: { message: string; color: string }) {
-  return (
-    <TouchableOpacity
-      onPress={() => Share.share({ message })}
-      activeOpacity={0.7}
-      style={{
-        flexDirection: 'row', alignItems: 'center', gap: 5,
-        alignSelf: 'flex-end', marginTop: 10,
-        paddingHorizontal: 12, paddingVertical: 6,
-        borderRadius: 20, borderWidth: 1,
-        borderColor: color + '55', backgroundColor: color + '15',
-      }}>
-      <Text style={{ fontSize: 12, color, fontWeight: '600' }}>↑ Share</Text>
-    </TouchableOpacity>
-  );
-}
-
 function PostSession({
   note, prs, volume, theme, noteLoading, onDone, focus, exSummaries,
 }: {
@@ -736,173 +662,304 @@ function PostSession({
   theme: AppThemeType; noteLoading: boolean; onDone: () => void;
   focus: string; exSummaries: ExSummary[];
 }) {
-  const color      = theme.gym ?? '#a855f7';
-  const date       = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-  const totalSets  = exSummaries.reduce((s, e) => s + e.sets, 0);
+  const { width: ww } = Dimensions.get('window');
+  const color      = theme.gym;
+  const gold       = '#f59e0b';
+  const hasPRs     = prs.length > 0;
   const focusLabel = focus.split('–')[0].trim() || focus;
+  const focusSub   = focus.includes('–') ? focus.split('–')[1]?.trim() ?? '' : '';
+  const totalSets  = exSummaries.reduce((s, e) => s + e.sets, 0);
+  const shortDate  = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase();
 
-  const cardStyle = {
-    borderRadius: 20, padding: 20, marginBottom: 4, borderWidth: 1,
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [pagerH,    setPagerH]    = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollTo = (idx: number) => {
+    scrollRef.current?.scrollTo({ x: idx * ww, animated: true });
+    setActiveIdx(idx);
   };
 
-  const recapText = [
-    `🏋️ PeakRoutine — Session Recap`,
-    `${date}`,
-    ``,
-    `${volume.toLocaleString()} kg total volume`,
-    `${exSummaries.length} exercises · ${totalSets} sets · ${prs.length} PRs`,
-    `${focusLabel}`,
+  // ── Share text per card ───────────────────────────────────────────────────
+  const recapShare = [
+    `🏋️ ${focusLabel.toUpperCase()} · DONE`,
+    volume > 0 ? `${volume.toLocaleString()} kg total volume` : 'Session logged',
+    `${exSummaries.length} exercises · ${totalSets} sets${hasPRs ? ` · ${prs.length} PR${prs.length > 1 ? 's' : ''}` : ''}`,
+    ``, `Tracked with PeakRoutine 🔥`,
   ].join('\n');
 
-  const liftsText = [
-    `🏋️ PeakRoutine — Your Lifts`,
-    `${date}`,
-    ``,
+  const liftsShare = [
+    `🏋️ ${focusLabel.toUpperCase()} — MY LIFTS`, ``,
     ...exSummaries.map(ex =>
-      `${ex.isPR ? '🏆 ' : ''}${ex.name}: ${ex.sets} sets · best ${ex.bestSet.reps}×${ex.bestSet.weightKg}kg`
+      `${ex.isPR ? '🏆 ' : ''}${ex.name}: ${ex.sets} sets · ${ex.bestSet.reps} × ${ex.bestSet.weightKg} kg`
     ),
+    ``, `Tracked with PeakRoutine 🔥`,
   ].join('\n');
 
-  const prsText = [
-    `🏆 PeakRoutine — New Personal Records`,
-    `${date}`,
+  const coachShare = [
+    hasPRs ? `🏆 NEW PERSONAL RECORD${prs.length > 1 ? 'S' : ''}` : `🧠 COACH NOTE`,
     ``,
-    ...prs.map(pr => `🏆 ${pr}`),
-  ].join('\n');
-
-  const coachText = [
-    `🧠 PeakRoutine — Coach`,
-    `${date}`,
-    ``,
+    ...(hasPRs ? prs.map(pr => `🏆 ${pr}`) : []),
+    hasPRs && note ? `` : '',
     note ?? 'Great session — keep showing up.',
+    ``, `Tracked with PeakRoutine 🔥`,
   ].join('\n');
+
+  // ── Sub-components ────────────────────────────────────────────────────────
+  const Divider = () => (
+    <View style={{ height: 1, backgroundColor: '#FFFFFF14', marginVertical: 20 }} />
+  );
+
+  const BrandRow = ({ shareText }: { shareText: string }) => (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFFFFF45', letterSpacing: 2, textTransform: 'uppercase' }}>
+        PeakRoutine
+      </Text>
+      <TouchableOpacity
+        onPress={() => Share.share({ message: shareText })}
+        activeOpacity={0.7}
+        style={{
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+          backgroundColor: '#FFFFFF18', borderWidth: 1, borderColor: '#FFFFFF28',
+        }}>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFFCC' }}>Share ↑</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const Dot = ({ active }: { active: boolean }) => (
+    <View style={{ width: active ? 22 : 6, height: 6, borderRadius: 3,
+      backgroundColor: active ? color : theme.border }} />
+  );
 
   return (
-    <ScrollView
-      contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
-      showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1 }}>
 
-      {/* Header */}
-      <Text style={{ fontSize: 44, textAlign: 'center', marginBottom: 6 }}>
-        {prs.length > 0 ? '🏆' : '✅'}
-      </Text>
-      <Text style={{ fontSize: 22, fontWeight: '800', color: theme.textPrimary, textAlign: 'center', marginBottom: 2 }}>
-        Session complete
-      </Text>
-      <Text style={{ fontSize: 13, color: theme.textMuted, textAlign: 'center', marginBottom: 28 }}>
-        Tap ↑ Share on any card to post it
-      </Text>
+      {/* ── Pager ─────────────────────────────────────────────────────────── */}
+      <View style={{ flex: 1 }} onLayout={e => setPagerH(e.nativeEvent.layout.height)}>
+        {pagerH > 0 && (
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={e =>
+              setActiveIdx(Math.round(e.nativeEvent.contentOffset.x / ww))
+            }
+          >
 
-      {/* ── Card 1: Recap ── */}
-      <View style={[cardStyle, { backgroundColor: color + '18', borderColor: color + '40' }]}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
-          Session Recap
-        </Text>
-        <Text style={{ fontSize: 13, color: theme.textMuted, marginBottom: 4 }}>{date}</Text>
-        <Text style={{ fontSize: 32, fontWeight: '900', color: theme.textPrimary, marginBottom: 2 }}>
-          {volume.toLocaleString()} kg
-        </Text>
-        <Text style={{ fontSize: 14, color: theme.textMuted, marginBottom: 14 }}>total volume</Text>
-        <View style={{ flexDirection: 'row', gap: 16, marginBottom: 10 }}>
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: theme.textPrimary }}>{exSummaries.length}</Text>
-            <Text style={{ fontSize: 11, color: theme.textMuted }}>exercises</Text>
-          </View>
-          <View style={{ width: 1, backgroundColor: theme.border }} />
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: theme.textPrimary }}>{totalSets}</Text>
-            <Text style={{ fontSize: 11, color: theme.textMuted }}>sets</Text>
-          </View>
-          <View style={{ width: 1, backgroundColor: theme.border }} />
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: theme.textPrimary }}>{prs.length}</Text>
-            <Text style={{ fontSize: 11, color: theme.textMuted }}>PRs</Text>
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ fontSize: 12, color: theme.textMuted }}>{focusLabel}</Text>
-        </View>
-        <Text style={{ fontSize: 10, color: theme.textMuted, marginTop: 10 }}>PeakRoutine</Text>
-      </View>
-      <ShareButton message={recapText} color={color} />
-
-      {/* ── Card 2: Lifts ── */}
-      {exSummaries.length > 0 && (
-        <>
-          <View style={[cardStyle, { backgroundColor: theme.bgCard, borderColor: theme.border, marginTop: 20 }]}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
-              Your Lifts
-            </Text>
-            {exSummaries.map((ex, i) => (
-              <View key={i} style={{
-                flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
-                borderBottomWidth: i < exSummaries.length - 1 ? 1 : 0,
-                borderBottomColor: theme.border,
-              }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textPrimary }}>
-                    {ex.isPR ? '🏆 ' : ''}{ex.name}
+            {/* ── Card 1: Hero Recap ── */}
+            <LinearGradient
+              colors={['#1B0930', '#0D0D1A']}
+              start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
+              style={{ width: ww, height: pagerH, padding: 28, justifyContent: 'space-between' }}
+            >
+              <View style={{ gap: 6 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color, textTransform: 'uppercase', letterSpacing: 1.5 }}>
+                      Session Complete
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#FFFFFF45', fontWeight: '600' }}>{shortDate}</Text>
+                </View>
+                <Text style={{ fontSize: 30, fontWeight: '900', color: '#FFFFFF', marginTop: 6, lineHeight: 34 }}>
+                  {focusLabel}
+                </Text>
+                {focusSub !== '' && (
+                  <Text style={{ fontSize: 11, color: '#FFFFFF50', letterSpacing: 1, textTransform: 'uppercase' }}>
+                    {focusSub}
                   </Text>
-                  <Text style={{ fontSize: 12, color: theme.textMuted, marginTop: 1 }}>
-                    {ex.sets} sets · best {ex.bestSet.reps} × {ex.bestSet.weightKg} kg
-                  </Text>
+                )}
+              </View>
+
+              <View style={{ alignItems: 'center' }}>
+                {volume > 0 ? (
+                  <>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#FFFFFF45', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6 }}>
+                      Total Volume
+                    </Text>
+                    <Text style={{ fontSize: 72, fontWeight: '900', color: '#FFFFFF', lineHeight: 78 }}>
+                      {volume.toLocaleString()}
+                    </Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color, letterSpacing: 2, textTransform: 'uppercase', marginTop: 2 }}>
+                      kilograms
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={{ fontSize: 52, marginBottom: 4 }}>{hasPRs ? '🏆' : '✅'}</Text>
+                )}
+
+                <View style={{ flexDirection: 'row', marginTop: 36, gap: 0 }}>
+                  {[
+                    { val: exSummaries.length, label: 'exercises', accent: false },
+                    { val: totalSets,          label: 'sets',      accent: false },
+                    { val: prs.length,         label: 'PRs',       accent: hasPRs },
+                  ].map(({ val, label, accent }, idx) => (
+                    <React.Fragment key={label}>
+                      {idx > 0 && (
+                        <View style={{ width: 1, backgroundColor: '#FFFFFF20', alignSelf: 'center', height: 30, marginHorizontal: 20 }} />
+                      )}
+                      <View style={{ alignItems: 'center', minWidth: 54 }}>
+                        <Text style={{ fontSize: 36, fontWeight: '900', color: accent ? gold : '#FFFFFF', lineHeight: 40 }}>
+                          {val}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#FFFFFF45', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          {label}
+                        </Text>
+                      </View>
+                    </React.Fragment>
+                  ))}
                 </View>
               </View>
-            ))}
-            <Text style={{ fontSize: 10, color: theme.textMuted, marginTop: 12 }}>PeakRoutine</Text>
-          </View>
-          <ShareButton message={liftsText} color={color} />
-        </>
-      )}
 
-      {/* ── Card 3: PRs ── */}
-      {prs.length > 0 && (
-        <>
-          <View style={[cardStyle, { backgroundColor: '#f59e0b14', borderColor: '#f59e0b44', marginTop: 20 }]}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
-              New Personal Records
-            </Text>
-            <Text style={{ fontSize: 36, textAlign: 'center', marginBottom: 10 }}>🏆</Text>
-            {prs.map((pr, i) => (
-              <View key={i} style={{
-                backgroundColor: '#f59e0b22', borderRadius: 10,
-                padding: 10, marginBottom: i < prs.length - 1 ? 8 : 0,
-              }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#f59e0b', textAlign: 'center' }}>{pr}</Text>
+              <View>
+                <Divider />
+                <BrandRow shareText={recapShare} />
               </View>
-            ))}
-            <Text style={{ fontSize: 10, color: '#f59e0b88', marginTop: 12 }}>PeakRoutine</Text>
-          </View>
-          <ShareButton message={prsText} color="#f59e0b" />
-        </>
-      )}
+            </LinearGradient>
 
-      {/* ── Card 4: Coach note ── */}
-      <View style={[cardStyle, { backgroundColor: color + '14', borderColor: color + '30', marginTop: 20 }]}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
-          Coach
-        </Text>
-        {noteLoading ? (
-          <View style={{ alignItems: 'center', gap: 10, paddingVertical: 20 }}>
-            <ActivityIndicator color={color} />
-            <Text style={{ fontSize: 12, color: theme.textMuted }}>Reviewing your session…</Text>
-          </View>
-        ) : (
-          <Text style={{ fontSize: 15, color: theme.textPrimary, lineHeight: 23 }}>
-            {note ?? 'Great session — keep showing up.'}
-          </Text>
+            {/* ── Card 2: Lifts ── */}
+            <LinearGradient
+              colors={['#061520', '#0D0D1A']}
+              start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
+              style={{ width: ww, height: pagerH, padding: 28, justifyContent: 'space-between' }}
+            >
+              <View style={{ gap: 4 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: theme.secondary }} />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: theme.secondary, textTransform: 'uppercase', letterSpacing: 1.5 }}>
+                      Your Lifts
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#FFFFFF45', fontWeight: '600' }}>{shortDate}</Text>
+                </View>
+                <Text style={{ fontSize: 24, fontWeight: '800', color: '#FFFFFF', marginTop: 6 }}>{focusLabel}</Text>
+              </View>
+
+              <View style={{ flex: 1, justifyContent: 'center', marginVertical: 8 }}>
+                <View style={{ height: 1, backgroundColor: '#FFFFFF14', marginBottom: 14 }} />
+                {exSummaries.slice(0, 6).map((ex, i) => (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 }}>
+                    <Text style={{ fontSize: 14, width: 20, textAlign: 'center', color: ex.isPR ? gold : '#FFFFFF35' }}>
+                      {ex.isPR ? '🏆' : '·'}
+                    </Text>
+                    <Text style={{ flex: 1, fontSize: 14, fontWeight: ex.isPR ? '700' : '500',
+                      color: ex.isPR ? '#FFFFFF' : '#FFFFFFCC' }}>
+                      {ex.name}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#FFFFFF55' }}>
+                      {ex.sets}×{ex.bestSet.reps} @ {ex.bestSet.weightKg}kg
+                    </Text>
+                  </View>
+                ))}
+                {exSummaries.length > 6 && (
+                  <Text style={{ fontSize: 11, color: '#FFFFFF35', textAlign: 'center', marginTop: 4 }}>
+                    +{exSummaries.length - 6} more
+                  </Text>
+                )}
+                <View style={{ height: 1, backgroundColor: '#FFFFFF14', marginTop: 14 }} />
+                {volume > 0 && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 16 }}>
+                    <View style={{ backgroundColor: '#FFFFFF10', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 8 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFFCC' }}>
+                        {volume.toLocaleString()} kg total volume
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <View>
+                <Divider />
+                <BrandRow shareText={liftsShare} />
+              </View>
+            </LinearGradient>
+
+            {/* ── Card 3: Coach + PRs ── */}
+            <LinearGradient
+              colors={hasPRs ? ['#1A0E00', '#0D0D1A'] : ['#08101E', '#0D0D1A']}
+              start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
+              style={{ width: ww, height: pagerH, padding: 28, justifyContent: 'space-between' }}
+            >
+              {hasPRs ? (
+                <View style={{ gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: gold }} />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: gold, textTransform: 'uppercase', letterSpacing: 1.5 }}>
+                      Personal Record{prs.length > 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 28, fontWeight: '900', color: '#FFFFFF', marginTop: 4 }}>🏆 New best!</Text>
+                  <View style={{ gap: 8, marginTop: 12 }}>
+                    {prs.map((pr, i) => (
+                      <View key={i} style={{ backgroundColor: gold + '18', borderRadius: 12,
+                        padding: 14, borderWidth: 1, borderColor: gold + '35' }}>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: gold }}>{pr}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: theme.primary }} />
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: theme.primary, textTransform: 'uppercase', letterSpacing: 1.5 }}>
+                    Coach
+                  </Text>
+                </View>
+              )}
+
+              <View style={{ flex: 1, justifyContent: hasPRs ? 'flex-end' : 'center', paddingTop: hasPRs ? 0 : 0 }}>
+                {hasPRs && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: theme.primary }} />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: theme.primary, textTransform: 'uppercase', letterSpacing: 1.5 }}>
+                      Coach
+                    </Text>
+                  </View>
+                )}
+                {noteLoading ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <ActivityIndicator color={theme.primary} size="small" />
+                    <Text style={{ fontSize: 13, color: '#FFFFFF45' }}>Writing your note…</Text>
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: 16, color: '#FFFFFFEE', lineHeight: 26 }}>
+                    {note ?? 'Great session — keep showing up.'}
+                  </Text>
+                )}
+              </View>
+
+              <View>
+                <Divider />
+                <BrandRow shareText={coachShare} />
+              </View>
+            </LinearGradient>
+
+          </ScrollView>
         )}
-        <Text style={{ fontSize: 10, color: theme.textMuted, marginTop: 12 }}>PeakRoutine</Text>
       </View>
-      {!noteLoading && <ShareButton message={coachText} color={color} />}
 
-      {/* Done button */}
-      <TouchableOpacity onPress={onDone} activeOpacity={0.8} style={{
-        backgroundColor: color, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 28,
-      }}>
-        <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>Done</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      {/* ── Bottom chrome ─────────────────────────────────────────────────── */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18, gap: 14 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+          {[0, 1, 2].map(i => (
+            <TouchableOpacity key={i} onPress={() => scrollTo(i)} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+              <Dot active={activeIdx === i} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity onPress={onDone} activeOpacity={0.8} style={{
+          backgroundColor: color, borderRadius: 16, paddingVertical: 15, alignItems: 'center',
+        }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>Done</Text>
+        </TouchableOpacity>
+      </View>
+
+    </View>
   );
 }
 
@@ -920,9 +977,11 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
   const [phase, setPhase] = useState<Phase>('session');
 
   // ── Exercise data ─────────────────────────────────────────────────────────
-  const [loading,    setLoading]    = useState(true);
-  const [exStates,   setExStates]   = useState<ExerciseState[]>([]);
-  const [showPicker, setShowPicker] = useState(false);
+  const [loading,      setLoading]      = useState(true);
+  const [exStates,     setExStates]     = useState<ExerciseState[]>([]);
+  const [activeExIdx,  setActiveExIdx]  = useState(0);
+  const [showPicker,   setShowPicker]   = useState(false);
+  const [infoExercise, setInfoExercise] = useState<Exercise | null>(null);
 
   // ── AI brief ─────────────────────────────────────────────────────────────
   const [brief,        setBrief]        = useState<Brief | null>(null);
@@ -979,13 +1038,17 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
           if (todayLog) {
             const restored = todayLog.sets.filter(s => s.exerciseId === ex.id);
             if (restored.length > 0) {
-              return { exerciseId: ex.id, sets: restored.map(s => ({ weightKg: s.weightKg, reps: s.reps, done: true })), expanded: true, lastSets, swapLoading: false, swapSuggestion: null };
+              return { exerciseId: ex.id, sets: restored.map(s => ({ weightKg: s.weightKg, reps: s.reps, done: true })), expanded: true, lastSets };
             }
           }
-          return { exerciseId: ex.id, sets: initSets(lastSets), expanded: false, lastSets, swapLoading: false, swapSuggestion: null };
+          return { exerciseId: ex.id, sets: initSets(lastSets), expanded: false, lastSets };
         }),
       );
-      if (!cancelled) { setExStates(states); setLoading(false); }
+      // On resume, open the first incomplete exercise; on fresh start, open index 0
+      const firstIncomplete = states.findIndex(s => !s.sets.every(set => set.done));
+      const startIdx = firstIncomplete !== -1 ? firstIncomplete : 0;
+      if (states.length > 0) states[startIdx] = { ...states[startIdx], expanded: true };
+      if (!cancelled) { setExStates(states); setActiveExIdx(startIdx); setLoading(false); }
     })();
 
     return () => { cancelled = true; };
@@ -1068,8 +1131,10 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
   }, []);
 
   // ── Exercise state updaters ──────────────────────────────────────────────
-  const toggleExpand = useCallback((i: number) =>
-    setExStates(p => p.map((ex, idx) => idx === i ? { ...ex, expanded: !ex.expanded } : ex)), []);
+  const toggleExpand = useCallback((i: number) => {
+    setActiveExIdx(i);
+    setExStates(p => p.map((ex, idx) => idx === i ? { ...ex, expanded: !ex.expanded } : ex));
+  }, []);
 
   const updateSet = useCallback((exIdx: number, si: number, field: 'weightKg' | 'reps', val: number) =>
     setExStates(p => p.map((ex, i) => i !== exIdx ? ex : {
@@ -1077,27 +1142,48 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
     })), []);
 
   const markDone = useCallback((exIdx: number, si: number) => {
-    // Capture current state before the update
     const ex  = exStates[exIdx];
     const set = ex?.sets[si];
-    const marking = set && !set.done; // true = marking done, false = undoing
+    const marking = set && !set.done;
 
-    setExStates(p => p.map((e, i) => i !== exIdx ? e : {
-      ...e, sets: e.sets.map((s, j) => j === si ? { ...s, done: !s.done } : s),
-    }));
+    setExStates(prev => {
+      const updated = prev.map((e, i) => i !== exIdx ? e : {
+        ...e, sets: e.sets.map((s, j) => j === si ? { ...s, done: !s.done } : s),
+      });
+      // Auto-advance: collapse done exercise, expand next undone one
+      if (marking && set.weightKg > 0 && set.reps > 0) {
+        const allDone = updated[exIdx].sets.every(s => s.done);
+        if (allDone) {
+          const nextIdx = updated.findIndex((e, i) => i > exIdx && !e.sets.every(s => s.done));
+          if (nextIdx !== -1) {
+            setActiveExIdx(nextIdx);
+            return updated.map((e, i) => {
+              if (i === exIdx)   return { ...e, expanded: false };
+              if (i === nextIdx) return { ...e, expanded: true };
+              return e;
+            });
+          } else {
+            // Last exercise — just collapse it
+            return updated.map((e, i) => i === exIdx ? { ...e, expanded: false } : e);
+          }
+        }
+      }
+      return updated;
+    });
 
     if (marking && set.weightKg > 0 && set.reps > 0) {
-      // Clear any running timer
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      setRestCtx(null);  // clear any stale banner before setting the new one
       const exercise    = getExerciseById(ex.exerciseId);
-      const recommended = exercise?.isCompound ? 120 : 75;
+      const recommended = exercise?.isCompound
+        ? ({ lose: 60, maintain: 90, gain: 120 }[profile.fitnessGoal] ?? 90)
+        : ({ lose: 45, maintain: 60, gain: 90  }[profile.fitnessGoal] ?? 60);
       setRestCtx({
         exIdx, setIdx: si,
         lastSet: { weightKg: set.weightKg, reps: set.reps },
         phase: 'prompted', secs: recommended, recommended,
       });
     } else {
-      // Undoing — clear rest if it was for this set
       setRestCtx(prev =>
         prev?.exIdx === exIdx && prev?.setIdx === si ? null : prev,
       );
@@ -1118,80 +1204,31 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
       return { ...ex, sets: sets.length > 0 ? sets : [{ weightKg: 20, reps: 8, done: false }] };
     })), []);
 
-  const removeExercise = useCallback((i: number) =>
-    setExStates(p => p.filter((_, idx) => idx !== i)), []);
+  const removeExercise = useCallback((i: number) => {
+    setExStates(p => p.filter((_, idx) => idx !== i));
+    setActiveExIdx(prev => {
+      if (prev < i)  return prev;           // removed after active — unchanged
+      if (prev > i)  return prev - 1;       // removed before active — shift down
+      return Math.max(0, i - 1);            // removed the active one — go to previous
+    });
+  }, []);
 
   const addExercise = useCallback((ex: Exercise) => {
+    setActiveExIdx(exStates.length);
     setExStates(p => [...p, {
       exerciseId: ex.id, sets: [{ weightKg: 20, reps: 8, done: false }],
-      expanded: true, lastSets: [], swapLoading: false, swapSuggestion: null,
+      expanded: true, lastSets: [],
     }]);
     getLastSets(ex.id).then(lastSets =>
       setExStates(p => p.map(s => s.exerciseId === ex.id && s.lastSets.length === 0 ? { ...s, lastSets } : s)),
     );
     setShowPicker(false);
-  }, []);
+  }, [exStates.length]);
 
-  // ── AI exercise swap ─────────────────────────────────────────────────────
-  const requestSwap = useCallback(async (exIdx: number) => {
-    const ex      = exStates[exIdx];
-    const current = ex ? getExerciseById(ex.exerciseId) : null;
-    if (!current) return;
-
-    setExStates(p => p.map((s, i) => i === exIdx ? { ...s, swapLoading: true, swapSuggestion: null } : s));
-    try {
-      const existing     = exStates.map(s => s.exerciseId);
-      const alternatives = EXERCISES.filter(e => e.category === current.category && !existing.includes(e.id));
-
-      if (alternatives.length === 0) {
-        setExStates(p => p.map((s, i) => i === exIdx ? { ...s, swapLoading: false } : s));
-        return;
-      }
-
-      const altList = alternatives.map(e => `${e.id} (${e.name})`).join(', ');
-      const raw = await callClaude({
-        systemPrompt: 'You are a strength coach. Return ONLY valid JSON, no markdown: { "exerciseId": "exact_id_from_list", "reason": "one sentence why" }',
-        userMessage:  `Swap: ${current.name} (${current.primaryMuscle})\nFocus: ${focus}\nGoal: ${profile.fitnessGoal}\nAvailable (use exact ID): ${altList}`,
-        maxTokens: 120,
-      });
-      const parsed = extractJSON<{ exerciseId: string; reason: string }>(raw);
-      let suggested = parsed ? getExerciseById(parsed.exerciseId) : null;
-      // Fallback: partial match or first alternative
-      if (!suggested && parsed?.exerciseId) {
-        suggested = alternatives.find(e =>
-          e.id.includes(parsed.exerciseId) || parsed.exerciseId.includes(e.id) ||
-          e.name.toLowerCase().includes(parsed.exerciseId.toLowerCase().replace(/_/g, ' '))
-        ) ?? alternatives[0];
-      }
-      if (!suggested) suggested = alternatives[0];
-
-      setExStates(p => p.map((s, i) => i === exIdx ? {
-        ...s, swapLoading: false,
-        swapSuggestion: { exercise: suggested!, reason: parsed?.reason ?? 'Good alternative for this focus' },
-      } : s));
-    } catch (_) {
-      setExStates(p => p.map((s, i) => i === exIdx ? { ...s, swapLoading: false } : s));
-    }
-  }, [exStates, focus, profile.fitnessGoal]);
-
-  const acceptSwap = useCallback((exIdx: number) => {
-    const newEx = exStates[exIdx]?.swapSuggestion?.exercise;
-    if (!newEx) return;
-    setExStates(p => p.map((ex, i) => i !== exIdx ? ex : {
-      ...ex, exerciseId: newEx.id,
-      sets: [{ weightKg: 20, reps: 8, done: false }],
-      swapSuggestion: null, lastSets: [],
-    }));
-    getLastSets(newEx.id).then(lastSets =>
-      setExStates(p => p.map(s => s.exerciseId === newEx.id && s.lastSets.length === 0 ? { ...s, lastSets } : s)),
-    );
-  }, [exStates]);
-
-  const dismissSwap = useCallback((exIdx: number) =>
-    setExStates(p => p.map((ex, i) => i === exIdx ? { ...ex, swapSuggestion: null } : ex)), []);
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
+    if (phase !== 'session') return;   // guard against double-tap
     setPhase('saving');
     try {
       // 1. Persist sets
@@ -1269,7 +1306,8 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
       }).then(raw => setPostNote(raw.trim())).catch(() => {}).finally(() => setNoteLoading(false));
 
     } catch (_) {
-      setPhase('session'); // fallback to session on hard error
+      setPhase('session');
+      Alert.alert('Save failed', 'Could not save your session. Please try again.');
     }
   }, [exStates, today, focus, onSaved, profile.fitnessGoal]);
 
@@ -1287,6 +1325,7 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <>
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -1376,7 +1415,7 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
                           Quick tips
                         </Text>
                         <Text style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 18 }}>
-                          Long-press weight or reps to type a custom value · Mark ✓ after each set then tap Rest to start a guided rest · Use Swap inside any exercise for an AI alternative
+                          Long-press weight or reps to type a custom value · Mark ✓ after each set to start a guided rest timer · Tap + to add more exercises
                         </Text>
                         <Text style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Tap to dismiss</Text>
                       </View>
@@ -1410,17 +1449,16 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
                       brief={brief?.targets.find(t => t.exerciseId === state.exerciseId)}
                       theme={theme}
                       restCtx={restCtx?.exIdx === i ? restCtx : undefined}
+                      isActive={i === activeExIdx}
                       onToggleExpand={() => toggleExpand(i)}
                       onSetChange={(si, field, val) => updateSet(i, si, field, val)}
                       onAddSet={() => addSet(i)}
                       onDeleteSet={si => deleteSet(i, si)}
                       onMarkDone={si => markDone(i, si)}
                       onRemove={() => removeExercise(i)}
-                      onRequestSwap={() => requestSwap(i)}
-                      onAcceptSwap={() => acceptSwap(i)}
-                      onDismissSwap={() => dismissSwap(i)}
                       onStartRest={startRest}
                       onSkipRest={skipRest}
+                      onInfo={() => setInfoExercise(getExerciseById(state.exerciseId) ?? null)}
                     />
                   ))}
 
@@ -1472,5 +1510,7 @@ export function WorkoutLogSheet({ visible, focus, onClose, onSaved, onCompleteGy
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
+    <ExerciseInfoSheet exercise={infoExercise} onClose={() => setInfoExercise(null)} />
+    </>
   );
 }

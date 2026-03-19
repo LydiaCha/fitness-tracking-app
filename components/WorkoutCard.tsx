@@ -76,11 +76,32 @@ export function WorkoutCard({
           </Text>
         </View>
         {duration && (
-          <View style={{ borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, backgroundColor: color + '30', borderColor: color }}>
-            <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, color }}>
+          <View style={{ borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, backgroundColor: theme.bgCardAlt, borderColor: theme.border }}>
+            <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, color: theme.textMuted }}>
               {duration}
             </Text>
           </View>
+        )}
+        {!isRest && onLogSets && (
+          <TouchableOpacity
+            onPress={onLogSets}
+            activeOpacity={0.8}
+            style={{
+              backgroundColor: sessionSummary ? color + '22' : color,
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 5,
+              borderWidth: sessionSummary ? 1 : 0,
+              borderColor: sessionSummary ? color + '55' : undefined,
+            }}>
+            <Text style={{ fontSize: 11, color: sessionSummary ? color : '#fff' }}>▶</Text>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: sessionSummary ? color : '#fff' }}>
+              {sessionSummary ? 'Resume' : 'Start'}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -97,6 +118,15 @@ export function WorkoutCard({
           </Text>
         ) : null}
       </View>
+
+      {/* ── Focus locked notice ── */}
+      {!onChangeFocus && !isRest && sessionSummary && (
+        <View style={{ paddingHorizontal: 12, paddingBottom: 8, marginTop: -4 }}>
+          <Text style={{ fontSize: 11, color: theme.textMuted }}>
+            🔒 Focus locked — session in progress
+          </Text>
+        </View>
+      )}
 
       {/* ── Focus swap pills ── */}
       {onChangeFocus && (
@@ -149,50 +179,14 @@ export function WorkoutCard({
         </View>
       )}
 
-      {/* ── Post-log summary or Log button ── */}
-      {!isRest && onLogSets && (
-        sessionSummary ? (
-          <TouchableOpacity
-            onPress={onLogSets}
-            activeOpacity={0.8}
-            style={{
-              marginHorizontal: 12,
-              marginBottom:     12,
-              paddingVertical:  10,
-              borderRadius:     10,
-              backgroundColor:  theme.success + '18',
-              borderWidth:      1,
-              borderColor:      theme.success + '55',
-              alignItems:       'center',
-              flexDirection:    'row',
-              justifyContent:   'center',
-              gap:               6,
-            }}>
-            <Text style={{ fontSize: 13, color: theme.success }}>✓</Text>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.success }}>
-              {sessionSummary.exerciseCount} exercises · {sessionSummary.totalSets} sets
-              {sessionSummary.volumeKg > 0 ? ` · ${sessionSummary.volumeKg.toLocaleString()} kg` : ''}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            onPress={onLogSets}
-            activeOpacity={0.8}
-            style={{
-              marginHorizontal: 12,
-              marginBottom:     12,
-              paddingVertical:  10,
-              borderRadius:     10,
-              backgroundColor:  color + '22',
-              borderWidth:      1,
-              borderColor:      color + '55',
-              alignItems:       'center',
-            }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color }}>
-              📊 Log sets & reps
-            </Text>
-          </TouchableOpacity>
-        )
+      {/* ── Post-log stats line ── */}
+      {!isRest && sessionSummary && (
+        <View style={{ paddingHorizontal: 12, paddingBottom: 12, marginTop: -4 }}>
+          <Text style={{ fontSize: 12, color: theme.success, fontWeight: '600' }}>
+            ✓ {sessionSummary.exerciseCount} exercises · {sessionSummary.totalSets} sets
+            {sessionSummary.volumeKg > 0 ? ` · ${sessionSummary.volumeKg.toLocaleString()} kg` : ''}
+          </Text>
+        </View>
       )}
     </View>
   );

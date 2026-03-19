@@ -4,7 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StatusBar, TextInput,
+  StatusBar, TextInput, Linking, Platform, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
@@ -263,21 +263,38 @@ export default function ProfileScreen() {
 
           {/* ── Feedback ── */}
           <Text style={s.sectionLabel}>Have your say</Text>
-          <TouchableOpacity
-            style={[s.card, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16 }]}
-            onPress={() => router.push('/feedback')}
-            activeOpacity={0.8}>
-            <Text style={{ fontSize: 22, marginRight: 14 }}>💬</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: theme.textPrimary, marginBottom: 2 }}>
-                Share feedback or request a feature
-              </Text>
-              <Text style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 17 }}>
-                Tell us what's working, what's missing, or what you'd love to see next.
-              </Text>
-            </View>
-            <Text style={s.chevron}>›</Text>
-          </TouchableOpacity>
+          <View style={s.card}>
+            <TouchableOpacity style={s.row} onPress={() => router.push('/feedback')} activeOpacity={0.7}>
+              <Text style={s.rowIcon}>💬</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowLabel}>Share feedback or request a feature</Text>
+                <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                  Tell us what's working, what's missing, or what you'd love to see next.
+                </Text>
+              </View>
+              <Text style={s.chevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.rowLast}
+              onPress={() => {
+                const url = Platform.OS === 'ios'
+                  ? 'https://apps.apple.com/app/idYOUR_APP_ID?action=write-review'
+                  : 'market://details?id=com.peakroutine.app';
+                Linking.openURL(url).catch(() =>
+                  Alert.alert('Could not open store', 'Please search for PeakRoutine in the App Store.')
+                );
+              }}
+              activeOpacity={0.7}>
+              <Text style={s.rowIcon}>⭐</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowLabel}>Rate the app</Text>
+                <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                  Enjoying PeakRoutine? Leave us a review
+                </Text>
+              </View>
+              <Text style={s.chevron}>›</Text>
+            </TouchableOpacity>
+          </View>
 
           <Text style={s.versionText}>PeakRoutine v1.0.0</Text>
         </View>

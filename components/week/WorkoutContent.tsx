@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
+import { ExerciseInfoSheet } from '@/components/ExerciseInfoSheet';
 import { useFocusEffect } from '@react-navigation/native';
 import { AppThemeType } from '@/constants/theme';
 import { WeekStyles } from '@/app/(tabs)/week.styles';
@@ -10,7 +11,7 @@ import {
 } from '@/utils/appConstants';
 import { safeGetItem, safeParseJSON } from '@/utils/storage';
 import {
-  WORKOUT_FOCUS_OPTIONS, getFocusOption, getDefaultExercisesForFocus,
+  WORKOUT_FOCUS_OPTIONS, getFocusOption, getDefaultExercisesForFocus, Exercise,
 } from '@/constants/exerciseRegistry';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -22,18 +23,18 @@ const MONTH_NAMES     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','
 // ─── WorkoutDayCard ───────────────────────────────────────────────────────────
 
 function WorkoutDayCard({
-  day, date, dayIndex, isToday, isPast, isCompleted, isNextWeek,
-  onChangeFocus, theme,
+  day, date, dayIndex, isToday, isPast, isCompleted,
+  onChangeFocus, onSelectExercise, theme,
 }: {
-  day:            DaySchedule;
-  date:           Date;
-  dayIndex:       number;
-  isToday:        boolean;
-  isPast:         boolean;
-  isCompleted:    boolean;
-  isNextWeek:     boolean;
-  onChangeFocus?: (focus: string) => void;
-  theme:          AppThemeType;
+  day:                DaySchedule;
+  date:               Date;
+  dayIndex:           number;
+  isToday:            boolean;
+  isPast:             boolean;
+  isCompleted:        boolean;
+  onChangeFocus?:     (focus: string) => void;
+  onSelectExercise:   (ex: Exercise) => void;
+  theme:              AppThemeType;
 }) {
   const [expanded, setExpanded] = useState(isToday && !!day.isGymDay);
   const gymColor   = theme.gym;
@@ -104,11 +105,7 @@ function WorkoutDayCard({
     <View style={{
       backgroundColor: theme.bgCard,
       borderRadius: 16, borderWidth: 1,
-      borderColor: isCompleted
-        ? theme.success + '55'
-        : isToday
-          ? gymColor + '55'
-          : theme.border,
+      borderColor: isToday ? gymColor : theme.border,
       marginBottom: 10,
       overflow: 'hidden',
       opacity: isPast && !isCompleted ? 0.5 : 1,
@@ -144,13 +141,10 @@ function WorkoutDayCard({
                 <Text style={{ fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.5 }}>TODAY</Text>
               </View>
             )}
-            {isCompleted && (
+            {isCompleted && !isToday && (
               <Text style={{ fontSize: 11, fontWeight: '700', color: theme.success }}>✓ Done</Text>
             )}
           </View>
-          <Text style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }} numberOfLines={1}>
-            {activeOption?.detail ?? day.workoutFocus ?? ''}
-          </Text>
         </View>
 
         {/* Duration pill */}
@@ -173,6 +167,13 @@ function WorkoutDayCard({
       {/* Expanded content */}
       {expanded && (
         <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+
+          {/* Focus detail */}
+          {activeOption?.detail && (
+            <Text style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>
+              {activeOption.detail}
+            </Text>
+          )}
 
           {/* Exercise preview */}
           {exercisePreview && (
@@ -232,18 +233,7 @@ function WorkoutDayCard({
                 {isCompleted ? '✓ Completed' : '— Not logged'}
               </Text>
             </View>
-          ) : (
-            // Next week — read-only focus label
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              marginBottom: 12, padding: 8,
-              backgroundColor: gymColor + '0e', borderRadius: 8,
-            }}>
-              <Text style={{ fontSize: 11, color: theme.textMuted, flex: 1 }}>
-                Same split as this week · Focus adjustments apply week-by-week from Today
-              </Text>
-            </View>
-          )}
+          ) : null}
 
           {/* Exercises from registry (structured, not text-parsed) */}
           {day.workoutFocus && (
@@ -254,16 +244,20 @@ function WorkoutDayCard({
               }}>
                 Exercises
               </Text>
-              {getDefaultExercisesForFocus(day.workoutFocus).map((ex, i) => (
-                <View key={ex.id} style={{
-                  flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-                  paddingVertical: 6,
-                  borderBottomWidth: i < getDefaultExercisesForFocus(day.workoutFocus).length - 1 ? 1 : 0,
-                  borderBottomColor: theme.border,
-                }}>
+              {getDefaultExercisesForFocus(day.workoutFocus).map((ex, i, arr) => (
+                <TouchableOpacity
+                  key={ex.id}
+                  onPress={() => onSelectExercise(ex)}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    paddingVertical: 8,
+                    borderBottomWidth: i < arr.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.border,
+                  }}>
                   <View style={{
                     width: 6, height: 6, borderRadius: 3,
-                    backgroundColor: gymColor, marginTop: 5,
+                    backgroundColor: gymColor, flexShrink: 0,
                   }} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13, fontWeight: '600', color: theme.textPrimary }}>
@@ -276,14 +270,15 @@ function WorkoutDayCard({
                   {ex.isCompound && (
                     <View style={{
                       backgroundColor: gymColor + '18', borderRadius: 4,
-                      paddingHorizontal: 5, paddingVertical: 1, alignSelf: 'center',
+                      paddingHorizontal: 5, paddingVertical: 1,
                     }}>
                       <Text style={{ fontSize: 9, fontWeight: '700', color: gymColor, textTransform: 'uppercase', letterSpacing: 0.8 }}>
                         Compound
                       </Text>
                     </View>
                   )}
-                </View>
+                  <Text style={{ fontSize: 14, color: theme.textMuted }}>›</Text>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -301,20 +296,13 @@ export function WorkoutContent({ theme, s }: { theme: AppThemeType; s: WeekStyle
 
   const { width: screenWidth } = useWindowDimensions();
   const stripWidth = screenWidth - 32;
-  const stripRef   = useRef<ScrollView>(null);
 
-  const [weekOffset, setWeekOffset] = useState<0 | 1>(0);
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
 
-  const thisWeekDates = useMemo(getWeekDatesMonFirst, []);
-  const nextWeekDates = useMemo(
-    () => thisWeekDates.map(d => { const n = new Date(d); n.setDate(d.getDate() + 7); return n; }),
-    [thisWeekDates],
-  );
-  const weekDates     = weekOffset === 0 ? thisWeekDates : nextWeekDates;
+  const weekDates     = useMemo(getWeekDatesMonFirst, []);
   const todayMonFirst = useMemo(getTodayMonFirst, []);
 
   // Completion state — refreshed every time this tab comes into focus
-  // Reads from the same key that Today writes to when a gym event is checked
   const [completedDates, setCompletedDates] = useState<Record<string, boolean>>({});
   useFocusEffect(useCallback(() => {
     safeGetItem(STORAGE_KEYS.WORKOUTS).then(raw =>
@@ -337,116 +325,85 @@ export function WorkoutContent({ theme, s }: { theme: AppThemeType; s: WeekStyle
     const end   = weekDates[6];
     const sm = MONTH_NAMES[start.getMonth()];
     const em = MONTH_NAMES[end.getMonth()];
-    const range = sm === em
+    return sm === em
       ? `${sm} ${start.getDate()}–${end.getDate()}`
       : `${sm} ${start.getDate()} – ${em} ${end.getDate()}`;
-    return weekOffset === 1 ? `Next week · ${range}` : range;
-  }, [weekDates, weekOffset]);
-
-  function goToWeek(offset: 0 | 1) {
-    setWeekOffset(offset);
-    stripRef.current?.scrollTo({ x: offset * stripWidth, animated: true });
-  }
+  }, [weekDates]);
 
   return (
     <>
       {/* ── Header ── */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-        <Text style={{ flex: 1, fontSize: 26, fontWeight: '800', color: theme.textPrimary, letterSpacing: -0.3 }}>
-          {weekOffset === 0 ? 'This Week' : 'Next Week'}
-        </Text>
-      </View>
-
+      <Text style={{ fontSize: 26, fontWeight: '800', color: theme.textPrimary, letterSpacing: -0.3, marginBottom: 2 }}>
+        This Week
+      </Text>
       <Text style={{ fontSize: 12, color: theme.textMuted, marginBottom: 16 }}>
         {dateRange} · {gymDays.length} sessions · ~{(totalMinutes / 60).toFixed(1).replace('.0', '')} hrs
       </Text>
 
-      {/* ── Week toggle ── */}
-      <View style={s.weekNavRow}>
-        <TouchableOpacity
-          onPress={() => goToWeek(0)}
-          style={[s.weekNavBtn, weekOffset === 0 && s.weekNavBtnActive]}>
-          <Text style={[s.weekNavBtnText, weekOffset === 0 && s.weekNavBtnTextActive]}>This Week</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => goToWeek(1)}
-          style={[s.weekNavBtn, weekOffset === 1 && s.weekNavBtnActive]}>
-          <Text style={[s.weekNavBtnText, weekOffset === 1 && s.weekNavBtnTextActive]}>Next Week</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Calendar strip — identical pattern to MealsContent ── */}
+      {/* ── Calendar strip ── */}
       <ScrollView
-        ref={stripRef}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 20 }}
-        onMomentumScrollEnd={e => {
-          const page = Math.round(e.nativeEvent.contentOffset.x / stripWidth);
-          setWeekOffset((Math.min(1, Math.max(0, page))) as 0 | 1);
-        }}>
-        {([thisWeekDates, nextWeekDates] as const).map((dates, wk) => (
-          <View key={wk} style={{ width: stripWidth, flexDirection: 'row', gap: 5 }}>
-            {dates.map((date, i) => {
-              const isToday   = i === todayMonFirst && wk === 0;
-              const isPast    = i < todayMonFirst && wk === 0;
-              const isGym     = !!schedule[i]?.isGymDay;
-              const gymColor  = theme.gym;
-              return (
-                <View
-                  key={i}
-                  style={[
-                    s.weekDayPill,
-                    isToday && { backgroundColor: gymColor, borderColor: gymColor },
-                    isPast && s.weekDayPillPast,
-                  ]}>
-                  <Text style={[s.weekDayPillName, isToday && s.weekDayPillNameToday]}>
-                    {SHORT_DAY_NAMES[i]}
-                  </Text>
-                  <Text style={[s.weekDayPillDate, isToday && s.weekDayPillDateToday]}>
-                    {date.getDate()}
-                  </Text>
-                  {/* Gym day dot */}
-                  {isGym && (
-                    <View style={{
-                      width: 4, height: 4, borderRadius: 2, marginTop: 3,
-                      backgroundColor: isToday ? '#ffffff88' : gymColor + '88',
-                    }} />
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        ))}
+        style={{ marginBottom: 20 }}>
+        <View style={{ width: stripWidth, flexDirection: 'row', gap: 5 }}>
+          {weekDates.map((date, i) => {
+            const isToday  = i === todayMonFirst;
+            const isPast   = i < todayMonFirst;
+            const isGym    = !!schedule[i]?.isGymDay;
+            const gymColor = theme.gym;
+            return (
+              <View
+                key={i}
+                style={[
+                  s.weekDayPill,
+                  isToday && { backgroundColor: gymColor, borderColor: gymColor },
+                  isPast && s.weekDayPillPast,
+                ]}>
+                <Text style={[s.weekDayPillName, isToday && s.weekDayPillNameToday]}>
+                  {SHORT_DAY_NAMES[i]}
+                </Text>
+                <Text style={[s.weekDayPillDate, isToday && s.weekDayPillDateToday]}>
+                  {date.getDate()}
+                </Text>
+                {isGym && (
+                  <View style={{
+                    width: 4, height: 4, borderRadius: 2, marginTop: 3,
+                    backgroundColor: isToday ? '#ffffff88' : gymColor + '88',
+                  }} />
+                )}
+              </View>
+            );
+          })}
+        </View>
       </ScrollView>
-      <Text style={s.weekNavSwipeHint}>Swipe calendar to see next week →</Text>
 
       {/* ── Day cards ── */}
       {schedule.map((day, i) => {
         const date        = weekDates[i] ?? new Date();
-        const isToday     = i === todayMonFirst && weekOffset === 0;
-        const isPast      = weekOffset === 0 && i < todayMonFirst;
+        const isToday     = i === todayMonFirst;
+        const isPast      = i < todayMonFirst;
         const isCompleted = !!completedDates[toKey(date)];
 
         return (
           <WorkoutDayCard
-            key={`${day.id}-${weekOffset}`}
+            key={day.id}
             day={day}
             date={date}
             dayIndex={i}
             isToday={isToday}
             isPast={isPast}
             isCompleted={isCompleted}
-            isNextWeek={weekOffset === 1}
-            onChangeFocus={weekOffset === 0 && !isPast
-              ? (focus) => setDayWorkoutFocus(i, focus)
-              : undefined
-            }
+            onChangeFocus={!isPast ? (focus) => setDayWorkoutFocus(i, focus) : undefined}
+            onSelectExercise={setSelectedExercise}
             theme={theme}
           />
         );
       })}
+
+      <ExerciseInfoSheet
+        exercise={selectedExercise}
+        onClose={() => setSelectedExercise(null)}
+      />
     </>
   );
 }

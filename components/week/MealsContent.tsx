@@ -113,14 +113,17 @@ export function MealsContent({
         <Text style={s.mealsTitle}>{weekOffset === 0 ? 'This Week' : 'Next Week'}</Text>
       </View>
 
-      <View style={s.adjustPrefsRow}>
-        <Text style={s.adjustPrefsText} numberOfLines={1}>
+      <View style={[s.adjustPrefsRow, { flexDirection: 'row', alignItems: 'center' }]}>
+        <Text style={[s.adjustPrefsText, { flex: 1 }]} numberOfLines={1}>
           {dateRange} · {updatedLabel ?? 'Personalised to your profile'}
         </Text>
+        {weekOffset === 0 && (
+          <Text style={{ fontSize: 11, color: theme.textMuted }}>Next week →</Text>
+        )}
       </View>
       <View style={s.adjustCtaRow}>
         <TouchableOpacity style={s.adjustCtaBtn} onPress={() => router.push('/my-health')} activeOpacity={0.7}>
-          <Text style={s.adjustCtaText}>📊 Edit targets</Text>
+          <Text style={s.adjustCtaText}>🎯 Edit targets</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.adjustCtaBtn} onPress={() => router.push('/food-preferences')} activeOpacity={0.7}>
           <Text style={s.adjustCtaText}>🥗 Food preferences</Text>
@@ -188,8 +191,6 @@ export function MealsContent({
           </View>
         ))}
       </ScrollView>
-      <Text style={s.weekNavSwipeHint}>Swipe calendar to see next week →</Text>
-
       {isGenerating && (
         <View style={s.progressBarWrapper}>
           <Text style={s.progressLabel}>{progressLabel}</Text>
