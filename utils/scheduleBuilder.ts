@@ -45,7 +45,7 @@ const GYM_DURATION_MINS = 75;
 // ─── Time helpers ─────────────────────────────────────────────────────────────
 
 /** Parse "4:30 PM" → minutes from midnight (0–1439). */
-function timeToMins(time: string): number {
+export function timeToMins(time: string): number {
   const parts = time.trim().split(' ');
   const period = parts[1] ?? 'AM';
   const [hStr, mStr = '0'] = (parts[0] ?? '0:0').split(':');

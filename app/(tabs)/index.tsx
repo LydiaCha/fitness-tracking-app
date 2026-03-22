@@ -27,6 +27,7 @@ import { getMeal } from '@/constants/mealDatabase';
 import { MACRO_TARGETS, SHAKE_RECIPES, MEAL_IDEAS } from '@/constants/nutritionData';
 import { getTodayId, STORAGE_KEYS, toKey, DAYS } from '@/utils/appConstants';
 import { loadCustomActivities, customToEvent, CustomActivity } from '@/utils/customActivities';
+import { timeToMins } from '@/utils/scheduleBuilder';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { loadActivityStreak } from '@/utils/streak';
 import { getDailyCoachNote } from '@/utils/coach';
@@ -300,7 +301,8 @@ export default function HomeScreen() {
       .map(e => e.workoutFocus!),
     [schedule, selectedDayIndex],
   );
-  // Merge user-defined custom activities for the selected day (appended after schedule events)
+  // Merge user-defined custom activities for the selected day, then re-sort chronologically
+  // so custom events appear at the correct position (not always last).
   const dayJsIndex = DAYS.indexOf(selectedDayId as typeof DAYS[number]);
   const mergedEvents = useMemo((): ScheduleEvent[] => {
     const customForDay = customActivities
@@ -309,7 +311,15 @@ export default function HomeScreen() {
     const base = profile.supplementsEnabled
       ? selectedDay.events
       : selectedDay.events.filter(e => e.type !== 'supplement');
-    return [...base, ...customForDay];
+    const all = [...base, ...customForDay];
+    // Re-sort relative to wake time so sleep always appears last and
+    // custom events slot into their correct position.
+    const wakeRef = timeToMins(all.find(e => e.type === 'wake')?.time ?? '7:00 AM');
+    all.sort((a, b) =>
+      ((timeToMins(a.time) - wakeRef) + 1440) % 1440 -
+      ((timeToMins(b.time) - wakeRef) + 1440) % 1440
+    );
+    return all;
   }, [selectedDay.events, customActivities, dayJsIndex, profile.supplementsEnabled]);
 
   const checkedEvents  = allCheckedEvents[selectedDayId]  ?? new Set<number>();
@@ -621,7 +631,7 @@ export default function HomeScreen() {
 
         {/* ── Daily Targets ── */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>📊 Daily Targets</Text>
+          <Text style={s.sectionTitle}>🎯 Daily Targets</Text>
           <View style={s.targetsCard}>
             {[
               { label: 'Calories', emoji: '🔥', color: theme.meal,
@@ -769,9 +779,9 @@ export default function HomeScreen() {
                     : () => toggleEvent(idx)}
                   onSkip={() => toggleSkip(idx)}
                   onLogSets={event.type === 'gym'
-                    ? () => setLogSheetFocus(event.workoutFocus ?? event.label)
+                    ? () => { setSessionSummary(null); setLogSheetFocus(event.workoutFocus ?? event.label); }
                     : undefined}
-                  onChangeFocus={event.type === 'gym'
+                  onChangeFocus={event.type === 'gym' && !sessionSummary
                     ? (focus) => setDayWorkoutFocus(selectedDayIndex, focus)
                     : undefined}
                   sessionSummary={event.type === 'gym' ? sessionSummary : undefined}
@@ -801,9 +811,15 @@ export default function HomeScreen() {
         onClose={() => setLogSheetFocus(null)}
         onSaved={refreshSessionSummary}
         onCompleteGymEvent={() => {
-          const gymEventIdx = selectedDay.events.findIndex(e => e.type === 'gym');
-          if (gymEventIdx !== -1 && !checkedEvents.has(gymEventIdx)) {
-            toggleEvent(gymEventIdx);
+          // Always use today's events and today's checked state, not selectedDay which
+          // may have changed if the user navigated away while the sheet was open.
+          const gymEventIdx = today.events.findIndex(e => e.type === 'gym');
+          const todayChecked = allCheckedEvents[todayId] ?? new Set<number>();
+          if (gymEventIdx !== -1 && !todayChecked.has(gymEventIdx)) {
+            const next = new Set(todayChecked);
+            next.add(gymEventIdx);
+            setAllCheckedEvents(prev => ({ ...prev, [todayId]: next }));
+            safeMergeItem(STORAGE_KEYS.WORKOUTS, JSON.stringify({ [toKey(new Date())]: true }));
           }
         }}
       />
@@ -829,7 +845,7 @@ export default function HomeScreen() {
                   { key: 'log-meal',    emoji: '🍽️', label: 'Log meal',         sub: 'Enter name, kcal & protein',      color: theme.meal },
                   { key: 'scan',        emoji: '📷', label: 'Scan barcode',      sub: 'Packaged food & drinks',          color: theme.meal },
                   { key: 'photo',       emoji: '📸', label: 'AI food scan',      sub: 'Point camera at your plate',      color: theme.meal },
-                  { key: 'log-workout', emoji: '🏋️', label: 'Log workout',       sub: "Mark today's session done",       color: theme.gym },
+                  { key: 'log-workout', emoji: '🏋️', label: 'Log workout',       sub: 'Log sets & track your session',   color: theme.gym },
                 ].map(({ key, emoji, label, sub, color }) => (
                   <TouchableOpacity
                     key={key}
@@ -844,8 +860,16 @@ export default function HomeScreen() {
                         setQuickLogOpen(null);
                         setTimeout(() => setShowPhotoCapture(true), 300);
                       } else if (key === 'log-workout') {
-                        logQuickWorkout();
                         setQuickLogOpen(null);
+                        const gymEvent = today.events.find(e => e.type === 'gym');
+                        if (gymEvent) {
+                          setTimeout(() => {
+                            setSessionSummary(null);
+                            setLogSheetFocus(gymEvent.workoutFocus ?? gymEvent.label);
+                          }, 300);
+                        } else {
+                          logQuickWorkout(); // fallback: no gym event scheduled today
+                        }
                       } else if (key === 'log-meal') {
                         setQuickLogOpen(key);
                       }

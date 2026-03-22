@@ -278,7 +278,7 @@ export default function MyHealthScreen() {
                 style={[s.rowLast, { borderTopWidth: 1, borderTopColor: theme.border + '55' }]}
                 onPress={() => openSection('goals')}
                 activeOpacity={0.7}>
-                <Text style={[s.rowLabel, { color: theme.primary, fontSize: 14 }]}>Edit targets</Text>
+                <Text style={[s.rowLabel, { color: theme.primary, fontSize: 14 }]}>🎯 Edit targets</Text>
                 <Text style={s.chevron}>›</Text>
               </TouchableOpacity>
             </>

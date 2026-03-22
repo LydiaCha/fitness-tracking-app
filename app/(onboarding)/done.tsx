@@ -117,7 +117,7 @@ export default function OnboardingDone() {
 
         {/* Macros card */}
         <View style={s.card}>
-          <Text style={s.cardTitle}>Daily targets</Text>
+          <Text style={s.cardTitle}>🎯 Daily targets</Text>
           <View style={s.macroRow}>
             {[
               { label: 'Calories', value: macros.calories, unit: 'kcal', color: theme.primary },
